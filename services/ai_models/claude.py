@@ -1,0 +1,166 @@
+import json
+import traceback
+from typing import Dict, Any, List, Optional
+
+from anthropic import AsyncAnthropic, APIError, APITimeoutError, RateLimitError as AnthropicRateLimitError
+from app.config import settings
+from app.utils.logger import setup_logger
+from app.core.exceptions import ExternalAPIError, RateLimitError
+
+# 设置日志记录器
+logger = setup_logger(__name__)
+
+
+class Claude:
+    """Anthropic API客户端封装类，支持异步调用Claude模型"""
+
+    def __init__(self, anthropic_api_key: Optional[str] = None):
+        """
+        初始化Claude客户端
+
+        Args:
+            anthropic_api_key: Anthropic API密钥，如果未提供则从环境变量中读取
+        """
+        # 设置Anthropic API Key
+        self.anthropic_key = anthropic_api_key or settings.ANTHROPIC_API_KEY
+
+        if not self.anthropic_key:
+            logger.warning("未提供Anthropic API密钥，Claude功能将不可用")
+            self.anthropic_client = None
+        else:
+            # 初始化Anthropic客户端
+            self.anthropic_client = AsyncAnthropic(api_key=self.anthropic_key)
+
+        # Claude模型名称映射
+        self.model_map = {
+            "claude-3-opus": "claude-3-opus-20240229",
+            "claude-3-sonnet": "claude-3-sonnet-20240229",
+            "claude-3-haiku": "claude-3-haiku-20240307",
+            "claude-3.5-sonnet": "claude-3-5-sonnet-20240620"
+        }
+
+    async def chat(self,
+                   system_prompt: str,
+                   user_prompt: str,
+                   model: str = "claude-3-haiku",
+                   temperature: float = None,
+                   max_tokens: int = None,
+                   timeout: int = 60
+                   ) -> Dict[str, Any]:
+        """
+        调用Anthropic的Claude聊天接口（异步）
+
+        Args:
+            system_prompt: 系统提示词
+            user_prompt: 用户提示词
+            model: 模型名称，默认为"claude-3-haiku"
+            temperature: 温度参数，默认使用配置中的DEFAULT_TEMPERATURE
+            max_tokens: 最大生成长度，默认使用配置中的DEFAULT_MAX_TOKENS
+            timeout: 超时时间，默认为60秒
+
+        Returns:
+            返回生成的结果（dict）
+
+        Raises:
+            ExternalAPIError: 当调用Anthropic API出错时
+            RateLimitError: 当遇到速率限制错误时
+        """
+        # 检查客户端是否初始化
+        if not self.anthropic_client:
+            raise ExternalAPIError(
+                detail="Anthropic客户端未初始化，请提供有效的API密钥",
+                service="Anthropic"
+            )
+
+        # 使用配置默认值
+        temperature = temperature if temperature is not None else settings.DEFAULT_TEMPERATURE
+        max_tokens = max_tokens or settings.DEFAULT_MAX_TOKENS
+
+        # 确保使用完整的模型名称
+        full_model_name = self.model_map.get(model.lower(), model)
+
+        try:
+            # 调用Anthropic的聊天接口
+            message = await self.anthropic_client.messages.create(
+                model=full_model_name,
+                system=system_prompt,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": user_prompt
+                    }
+                ],
+                temperature=temperature,
+                max_tokens=max_tokens,
+                timeout=timeout
+            )
+
+            # 记录基本响应信息
+            logger.info(
+                f"Claude响应: 模型={full_model_name}, "
+                f"输出tokens={message.usage.output_tokens}, "
+                f"输入tokens={message.usage.input_tokens}"
+            )
+
+            # 将Anthropic响应转换为标准格式
+            content = message.content[0].text if message.content else ""
+            standardized_response = {
+                "id": message.id,
+                "model": message.model,
+                "choices": [
+                    {
+                        "message": {
+                            "role": "assistant",
+                            "content": content
+                        },
+                        "index": 0,
+                        "finish_reason": message.stop_reason
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": message.usage.input_tokens,
+                    "completion_tokens": message.usage.output_tokens,
+                    "total_tokens": message.usage.input_tokens + message.usage.output_tokens
+                }
+            }
+
+            return standardized_response
+
+        except AnthropicRateLimitError as e:
+            # 处理速率限制错误
+            logger.error(f"Anthropic速率限制错误: {str(e)}")
+            retry_after = getattr(e, "retry_after", 60)
+            raise RateLimitError(
+                detail=f"Anthropic API速率限制: {str(e)}",
+                retry_after=retry_after
+            )
+
+        except APITimeoutError as e:
+            # 处理超时错误
+            logger.error(f"Anthropic API超时: {str(e)}")
+            raise ExternalAPIError(
+                detail=f"Anthropic API请求超时",
+                service="Anthropic",
+                original_error=e,
+                status_code=408  # 请求超时
+            )
+
+        except APIError as e:
+            # 处理API错误
+            logger.error(f"Anthropic API错误: {str(e)}")
+            raise ExternalAPIError(
+                detail=f"调用Anthropic API时出错: {str(e)}",
+                service="Anthropic",
+                original_error=e,
+                status_code=getattr(e, "status_code", 500)
+            )
+
+        except Exception as e:
+            # 记录其他未预期错误
+            logger.error(f"调用Claude时发生未预期错误: {str(e)}")
+            traceback.print_exc()
+            raise ExternalAPIError(
+                detail=f"调用Claude时发生未预期错误",
+                service="Anthropic",
+                original_error=e
+            )

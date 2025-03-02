@@ -1,0 +1,258 @@
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request
+from typing import Dict, Any, List, Optional
+import time
+from datetime import datetime
+
+from app.api.models.comments import (
+    VideoCommentsRequest,
+    VideoCommentsResponse,
+    PurchaseIntentRequest,
+    PurchaseIntentAnalysis,
+    PotentialCustomersRequest,
+    PotentialCustomersAnalysis
+)
+from app.api.models.responses import create_response
+from agents.customer_agent import CustomerAgent
+from app.core.exceptions import (
+    ValidationError,
+    ExternalAPIError,
+    InternalServerError,
+    NotFoundError
+)
+from app.utils.logger import setup_logger
+
+# 设置日志记录器
+logger = setup_logger(__name__)
+
+# 创建路由器
+router = APIRouter(prefix="/comments")
+
+
+# 依赖项：获取CommentAgent实例
+async def get_customer_agent():
+    return CustomerAgent()
+
+
+@router.get(
+    "/health",
+    summary="健康检查",
+    description="检查API是否正常运行",
+    tags=["健康检查"]
+)
+async def health_check():
+    """简单的健康检查端点"""
+    return create_response(
+        data={"status": "healthy", "timestamp": datetime.now().isoformat()},
+        success=True
+    )
+
+
+@router.post(
+    "/fetch",
+    summary="获取视频评论",
+    description="获取指定TikTok视频的评论数据",
+    response_model_exclude_none=True,
+    tags=["评论获取"]
+)
+async def fetch_video_comments(
+        request: Request,
+        body: VideoCommentsRequest,
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    获取指定TikTok视频的评论数据
+
+    - **aweme_id**: TikTok视频ID
+
+    返回清理后的评论列表
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"获取视频 {body.aweme_id} 的评论")
+
+        comments_data = await customer_agent.fetch_video_comments(body.aweme_id)
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=comments_data,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+
+@router.post(
+    "/analysis/purchase-intent",
+    summary="分析购买意图",
+    description="分析指定TikTok视频评论中的购买意图",
+    response_model_exclude_none=True,
+    tags=["评论分析"]
+)
+async def analyze_purchase_intent(
+        request: Request,
+        body: PurchaseIntentRequest,
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    分析指定TikTok视频评论中的购买意图
+
+    - **aweme_id**: TikTok视频ID
+    - **batch_size**: 每批处理的评论数量，默认为30
+
+    返回购买意图分析结果
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"分析视频 {body.aweme_id} 的购买意图")
+
+        result = await customer_agent.get_purchase_intent_stats(
+            body.aweme_id,
+            body.batch_size
+        )
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=result,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except InternalServerError as e:
+        logger.error(f"内部服务器错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"分析购买意图时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+
+@router.post(
+    "/analysis/potential-customers",
+    summary="识别潜在客户",
+    description="根据评论识别TikTok视频的潜在客户",
+    response_model_exclude_none=True,
+    tags=["评论分析"]
+)
+async def identify_potential_customers(
+        request: Request,
+        body: PotentialCustomersRequest,
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    根据评论识别TikTok视频的潜在客户
+
+    - **aweme_id**: TikTok视频ID
+    - **batch_size**: 每批处理的评论数量，默认为30
+    - **min_score**: 最小参与度分数，范围0-100，默认为50
+    - **max_score**: 最大参与度分数，范围0-100，默认为100
+
+    返回潜在客户分析结果
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"识别视频 {body.aweme_id} 的潜在客户")
+
+        result = await customer_agent.get_potential_customers(
+            body.aweme_id,
+            body.batch_size,
+            body.min_score,
+            body.max_score
+        )
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=result,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except InternalServerError as e:
+        logger.error(f"内部服务器错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"识别潜在客户时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+
+@router.get(
+    "/{aweme_id}",
+    summary="根据ID获取视频评论",
+    description="使用GET方法获取指定TikTok视频的评论数据",
+    response_model_exclude_none=True,
+    tags=["评论获取"]
+)
+async def get_video_comments(
+        request: Request,
+        aweme_id: str = Path(..., description="TikTok视频ID"),
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    使用GET方法获取指定TikTok视频的评论数据
+
+    - **aweme_id**: TikTok视频ID（路径参数）
+
+    返回清理后的评论列表
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"获取视频 {aweme_id} 的评论")
+
+        if not aweme_id:
+            raise ValidationError(detail="视频ID不能为空", field="aweme_id")
+
+        comments_data = await customer_agent.fetch_video_comments(aweme_id)
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=comments_data,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
