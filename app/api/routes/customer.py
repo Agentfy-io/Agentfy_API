@@ -56,7 +56,7 @@ async def health_check():
 )
 async def fetch_video_comments(
         request: Request,
-        body: VideoCommentsRequest,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """
@@ -95,9 +95,8 @@ async def fetch_video_comments(
 
 
 @router.post(
-    "/analysis/purchase-intent",
-    summary="分析购买意图",
-    description="分析指定TikTok视频评论中的购买意图",
+    "/fetch_purchase_intent_stats",
+    summary="分析指定视频购买意图",
     response_model_exclude_none=True,
     tags=["评论分析"]
 )
@@ -111,6 +110,7 @@ async def analyze_purchase_intent(
 
     - **aweme_id**: TikTok视频ID
     - **batch_size**: 每批处理的评论数量，默认为30
+    - **concurency**: ai处理并发数，默认为5, 最大为10
 
     返回购买意图分析结果
     """
@@ -120,8 +120,9 @@ async def analyze_purchase_intent(
         logger.info(f"分析视频 {body.aweme_id} 的购买意图")
 
         result = await customer_agent.get_purchase_intent_stats(
-            body.aweme_id,
             body.batch_size
+            batch_size,
+            concurency
         )
 
         processing_time = time.time() - start_time
@@ -153,6 +154,7 @@ async def analyze_purchase_intent(
     "/analysis/potential-customers",
     summary="识别潜在客户",
     description="根据评论识别TikTok视频的潜在客户",
+- batch_size: 每批处理的评论数量，默认为30
     response_model_exclude_none=True,
     tags=["评论分析"]
 )
