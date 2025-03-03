@@ -298,7 +298,7 @@ class CustomerAgent:
     async def _analyze_aspect(
             self,
             aspect_type: str,
-            comment_data: List[Dict[str, Any]]
+            comment_data: List[Dict[str, Any]],
     ) -> Optional[List[Dict[str, Any]]]:
         """
         通用分析方法，根据不同的分析类型调用ChatGPT或Claude AI模型。
@@ -392,7 +392,8 @@ class CustomerAgent:
     async def get_purchase_intent_stats(
             self,
             aweme_id: str,
-            batch_size: int = 30
+            batch_size: int = 30,
+            concurrency: int = 5
     ) -> Dict[str, Any]:
         """
         获取指定视频的购买意图统计信息
@@ -400,6 +401,7 @@ class CustomerAgent:
         Args:
             aweme_id (str): 视频ID
             batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): ai处理并发数，默认5
 
         Returns:
             Dict[str, Any]: 购买意图统计信息
@@ -438,7 +440,8 @@ class CustomerAgent:
             analyzed_df = await self.analyze_comments_batch(
                 comments_df,
                 'purchase_intent',
-                batch_size
+                batch_size,
+                concurrency
             )
 
             if analyzed_df.empty:
