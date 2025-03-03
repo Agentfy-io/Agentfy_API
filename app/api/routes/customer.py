@@ -70,9 +70,9 @@ async def fetch_video_comments(
     start_time = time.time()
 
     try:
-        logger.info(f"获取视频 {body.aweme_id} 的评论")
+        logger.info(f"获取视频 {aweme_id} 的评论")
 
-        comments_data = await customer_agent.fetch_video_comments(body.aweme_id)
+        comments_data = await customer_agent.fetch_video_comments(aweme_id)
 
         processing_time = time.time() - start_time
 
@@ -105,9 +105,12 @@ async def fetch_video_comments(
 """,
     response_model_exclude_none=True,
 )
+
 async def analyze_purchase_intent(
         request: Request,
-        body: PurchaseIntentRequest,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
+        batch_size : int = Query(30, description="每批处理的评论数量"),
+        concurency: int = Query(5, description="ai处理并发数"),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """
@@ -122,10 +125,10 @@ async def analyze_purchase_intent(
     start_time = time.time()
 
     try:
-        logger.info(f"分析视频 {body.aweme_id} 的购买意图")
+        logger.info(f"分析视频 {aweme_id} 的购买意图")
 
         result = await customer_agent.get_purchase_intent_stats(
-            body.batch_size
+            aweme_id,
             batch_size,
             concurency
         )
@@ -167,7 +170,10 @@ async def analyze_purchase_intent(
 )
 async def identify_potential_customers(
         request: Request,
-        body: PotentialCustomersRequest,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
+        batch_size: int = Query(30, description="每批处理的评论数量"),
+        min_score: int = Query(1, description="最小参与度分数，范围0-100"),
+        max_score: int = Query(100, description="最大参与度分数，范围1-100"),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """
@@ -183,13 +189,13 @@ async def identify_potential_customers(
     start_time = time.time()
 
     try:
-        logger.info(f"识别视频 {body.aweme_id} 的潜在客户")
+        logger.info(f"识别视频 {aweme_id} 的潜在客户")
 
         result = await customer_agent.get_potential_customers(
-            body.aweme_id,
-            body.batch_size,
-            body.min_score,
-            body.max_score
+            aweme_id,
+            batch_size,
+            min_score,
+            max_score
         )
 
         processing_time = time.time() - start_time
