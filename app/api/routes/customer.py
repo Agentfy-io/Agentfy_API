@@ -3,7 +3,7 @@ from typing import Dict, Any, List, Optional
 import time
 from datetime import datetime
 
-from app.api.models.comments import (
+from app.api.models.customer import (
     VideoCommentsRequest,
     VideoCommentsResponse,
     PurchaseIntentRequest,
@@ -25,7 +25,7 @@ from app.utils.logger import setup_logger
 logger = setup_logger(__name__)
 
 # 创建路由器
-router = APIRouter(prefix="/comments")
+router = APIRouter(prefix="/customers")
 
 
 # 依赖项：获取CommentAgent实例
