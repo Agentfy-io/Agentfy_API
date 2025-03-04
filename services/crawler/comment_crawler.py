@@ -63,7 +63,7 @@ class CommentCollector:
         """
         params = {
             'aweme_id': aweme_id,
-            'count': 20,
+            'count': 30,
             'cursor': cursor
         }
 

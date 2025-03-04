@@ -42,7 +42,7 @@ class VideoCollector:
         self.endpoints = {
             'one_video': f"{self.base_url}/api/v1/tiktok/app/v3/fetch_one_video",
             'hashtag': f"{self.base_url}/api/v1/tiktok/app/v3/fetch_hashtag_video_list",
-            'keywords': f"{self.base_url}/api/v1/tiktok/app/v3/fetch_video_search_result"
+            'keywords': f"{self.base_url}/api/v1/tiktok/web/fetch_search_video"
         }
 
         self.MAX_RETRIES = 3
@@ -202,7 +202,7 @@ class VideoCollector:
                 original_error=e
             )
 
-    async def collect_hashtag_videos(self, chi_id: str, batch_size: int = 5) -> dict[str, str | int | list[Any]]:
+    async def collect_videos_by_hashtag(self, chi_id: str, batch_size: int = 5) -> Dict[str, Any]:
         """
         收集话题标签的视频，每次批量并发请求多个游标位置
 
@@ -306,16 +306,13 @@ class VideoCollector:
                 original_error=e
             )
 
-    async def collect_keywords_videos(self, keyword: str, sort_type: int = 0, publish_time: int = 0,
-                                      batch_size: int = 5) -> dict[str, str | int | list[Any]]:
+    async def collect_videos_by_keyword(self, keyword: str, count: int = 20) -> Dict[str, Any]:
         """
         收集关键词搜索的视频，每次批量并发请求多个偏移位置
 
         Args:
             keyword: 搜索关键词
-            sort_type: 排序类型，0-相关性，1-点赞数
-            publish_time: 发布时间，0-全部，1-天，7-周，30-月
-            batch_size: 每批并发请求的数量，默认5
+            count: 每次请求的视频数量，默认100
 
         Returns:
             收集到的视频列表
@@ -329,69 +326,52 @@ class VideoCollector:
             raise ValidationError(detail="搜索关键词不能为空", field="keyword")
 
         videos = []
-        count_per_request = 20
+        count_per_request = count
         current_offset = 0
+        has_more = True
+        search_id = ''
 
         try:
             async with aiohttp.ClientSession() as session:
-                while True:
-                    # 创建当前批次的任务
-                    tasks = []
-                    for i in range(batch_size):
-                        offset = current_offset + (i * count_per_request)
-                        tasks.append(self._make_request(
-                            session,
-                            self.endpoints['keywords'],
-                            {
-                                'keyword': keyword,
-                                'offset': offset,
-                                'sort_type': sort_type,
-                                'publish_time': publish_time,
-                                'count': count_per_request
-                            },
-                            f"获取关键词 {keyword} 的视频时出错"
-                        ))
+                while has_more:
+                    result = await self._make_request(
+                        session,
+                        self.endpoints['keywords'],
+                        {
+                            'keyword': keyword,
+                            'count': count_per_request,
+                            'offset': current_offset,
+                            'search_id': search_id
+                        },
+                        f"获取关键词 {keyword} 的视频时出错"
+                    )
 
-                    # 并发执行所有任务
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    if not result:
+                        logger.error(f"获取关键词 {keyword} 的视频时出错: 无响应数据")
+                        break
 
-                    # 处理返回的结果
-                    new_videos_count = 0
+                    result_data = result.get('data', {}).get('item_list', [])
 
-                    for i, result in enumerate(results):
-                        if isinstance(result, Exception):
-                            if isinstance(result, (ExternalAPIError, RateLimitError)):
-                                raise result
-                            logger.error(f"批次请求发生错误: {str(result)}")
-                            continue
+                    if result_data:
+                        videos.extend(result_data)
+                        new_videos_count = len(result_data)
 
-                        if not result:
-                            continue
+                    # 检查当前请求的has_more状态
+                    has_more = result.get('data', {}).get('has_more', False)
+                    if not has_more:
+                        logger.info(f"收集完成，偏移量 {current_offset} 处的请求返回has_more=False")
+                        break
 
-                        result_data = result.get('data', {})
-                        batch_videos = result_data.get('data', [])
-
-                        if batch_videos:
-                            videos.extend(batch_videos)
-                            new_videos_count += len(batch_videos)
-
-                        # 检查当前请求的has_more状态
-                        if not result_data.get('has_more', False):
-                            # 只要有一个请求返回has_more为False，立即停止整个收集过程
-                            offset = current_offset + (i * count_per_request)
-                            logger.info(f"收集完成，偏移量 {offset} 处的请求返回has_more=False")
-                            return videos
+                    # 更新下一批次的起始偏移量
+                    current_offset = result.get('data', {}).get('cursor', 0)
+                    search_id = result.get('data', {}).get('log_pb', {}).get('impr_id', '')
 
                     logger.info(f"已收集 {new_videos_count} 个新视频，总计 {len(videos)} 个视频")
 
                     # 如果没有新视频，可能已经到达尽头
                     if new_videos_count == 0:
                         break
-
-                    # 更新下一批次的起始偏移量
-                    current_offset = current_offset + (batch_size * count_per_request)
-
-                    # 批次间的速率限制
+                    # 速率限制
                     await asyncio.sleep(1)
 
             return {
@@ -399,11 +379,9 @@ class VideoCollector:
                 'videos': videos,
                 'video_count': len(videos)
             }
-
         except (ValidationError, ExternalAPIError, RateLimitError):
             # 直接向上传递这些已知错误
             raise
-
         except Exception as e:
             logger.error(f"收集关键词视频时发生未预期错误: {str(e)}")
             raise ExternalAPIError(
@@ -411,3 +389,4 @@ class VideoCollector:
                 service="TikHub",
                 original_error=e
             )
+

@@ -14,7 +14,7 @@ class CommentCleaner:
 
     async def clean_video_comments(
             self,
-            comments: List[Dict[str, Any]]
+            comments: Dict[str, Any]
     ) -> Dict[str, Any]:
         """
         清洗和处理特定视频的原始评论
@@ -33,8 +33,9 @@ class CommentCleaner:
         if not aweme_id:
             raise ValidationError(detail="视频ID不能为空", field="aweme_id")
 
+        comments = comments.get('comments', [])
         if not isinstance(comments, list):
-            raise ValidationError(detail="评论必须是列表格式", field="comments")
+            raise ValidationError(detail="评论数据必须是列表", field="comments")
 
         try:
             # 清洗和处理评论

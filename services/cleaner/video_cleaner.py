@@ -11,7 +11,7 @@ logger = setup_logger(__name__)
 class VideoCleaner:
     """TikTok视频清洗器，负责处理和标准化原始视频数据"""
 
-    async def clean_one_video(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def clean_app_video(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         清洗和处理单个视频的原始数据
 
@@ -129,7 +129,7 @@ class VideoCleaner:
                 'processed': False
             }
 
-    async def clean_hashtag_videos(self, video_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def clean_videos_by_hashtag(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         清洗和处理话题标签视频列表
 
@@ -142,9 +142,9 @@ class VideoCleaner:
         Raises:
             ValidationError: 当输入数据无效时
         """
-        if not isinstance(video_list, list):
-            raise ValidationError(detail="视频列表必须是列表格式", field="video_list")
-
+        if not isinstance(video_data, dict):
+            raise ValidationError(detail="视频数据必须是字典格式", field="video_data")
+        video_list = video_data.get('videos', [])
         try:
             # 清洗和处理视频列表
             cleaned_videos = []
@@ -152,7 +152,7 @@ class VideoCleaner:
 
             for video in video_list:
                 try:
-                    cleaned_video = await self.clean_one_video(video)
+                    cleaned_video = await self.clean_app_video(video)
                     if cleaned_video:
                         cleaned_videos.append(cleaned_video)
                 except Exception as e:
@@ -161,7 +161,11 @@ class VideoCleaner:
                     continue
 
             logger.info(f"已成功清洗 {len(cleaned_videos)} 个话题视频，失败 {failed_count} 个")
-            return cleaned_videos
+            return {
+                'hashtag': video_data.get('chi_id', ''),
+                'videos': cleaned_videos,
+                'video_count': len(cleaned_videos),
+            }
 
         except ValidationError:
             # 直接向上传递验证错误
@@ -169,14 +173,17 @@ class VideoCleaner:
         except Exception as e:
             logger.error(f"清洗话题视频列表时出错: {str(e)}")
             # 返回已清洗的视频（可能是部分），而不是抛出异常中断整个流程
-            return []
+            return {
+                'videos': [],
+                'error': str(e),
+            }
 
-    async def clean_keyword_videos(self, video_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    async def clean_videos_by_keyword(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         清洗和处理关键词搜索视频列表
 
         Args:
-            video_list: 原始视频列表数据
+            video_data: 原始视频列表数据
 
         Returns:
             清洗后的视频列表
@@ -184,32 +191,62 @@ class VideoCleaner:
         Raises:
             ValidationError: 当输入数据无效时
         """
-        if not isinstance(video_list, list):
-            raise ValidationError(detail="视频列表必须是列表格式", field="video_list")
+        if not isinstance(video_data, dict):
+            raise ValidationError(detail="视频数据必须是字典格式", field="video_data")
+
+        video_list = video_data.get('videos', [])
 
         try:
             # 清洗和处理视频列表
             cleaned_videos = []
             failed_count = 0
 
+
             for video in video_list:
                 try:
-                    video_info = video.get('aweme_info', {})
-                    if not video_info:
-                        logger.warning("跳过无效视频数据格式")
-                        failed_count += 1
-                        continue
+                    cleaned_video = {
+                        'aweme_id': video.get('id', ''),
+                        'desc': video.get('desc', ''),
+                        'create_time': video.get('create_time', ''),
+                        'playAddr': video.get('video', {}).get('playAddr', ''),
+                        'duration': video.get('video', {}).get('duration', 0),
+                        'uid': video.get('author', {}).get('id', ''),
+                        'uniqueId': video.get('author', {}).get('uniqueId', ''),
+                        'nickname': video.get('author', {}).get('nickname', ''),
+                        'avatarMedium': video.get('author', {}).get('avatarMedium', ''),
+                        'signature': video.get('author', {}).get('signature', ''),
+                        'secUid': video.get('author', {}).get('secUid', ''),
+                        'privateAccount': video.get('author', {}).get('privateAccount', False),
+                        'mid': video.get('music', {}).get('id', ''),
+                        'musicTitle': video.get('music', {}).get('title', ''),
+                        'musicAuthor': video.get('music', {}).get('authorName', ''),
+                        'album': video.get('music', {}).get('album', ''),
+                        'diggCount': video.get('stats', {}).get('diggCount', 0),
+                        'shareCount': video.get('stats', {}).get('shareCount', 0),
+                        'commentCount': video.get('stats', {}).get('commentCount', 0),
+                        'playCount': video.get('stats', {}).get('playCount', 0),
+                        'collectCount': video.get('stats', {}).get('collectCount', 0),
+                        'author_following_count': video.get('authorStats', {}).get('followingCount', 0),
+                        'author_follower_count': video.get('authorStats', {}).get('followerCount', 0),
+                        'author_heart_count': video.get('authorStats', {}).get('heartCount', 0),
+                        'author_video_count': video.get('authorStats', {}).get('videoCount', 0),
+                        'author_heart': video.get('authorStats', {}).get('heart', 0),
+                        'author_digg_count': video.get('authorStats', {}).get('diggCount', 0),
+                        'isAds': video.get('isAds', False),
 
-                    cleaned_video = await self.clean_one_video(video_info)
-                    if cleaned_video:
-                        cleaned_videos.append(cleaned_video)
+                    }
+                    cleaned_videos.append(cleaned_video)
                 except Exception as e:
                     logger.error(f"清洗关键词视频时出错: {str(e)}")
                     failed_count += 1
                     continue
 
             logger.info(f"已成功清洗 {len(cleaned_videos)} 个关键词视频，失败 {failed_count} 个")
-            return cleaned_videos
+            return {
+                'keyword': video_data.get('keyword', ''),
+                'videos': cleaned_videos,
+                'video_count': len(cleaned_videos),
+            }
 
         except ValidationError:
             # 直接向上传递验证错误
@@ -217,7 +254,10 @@ class VideoCleaner:
         except Exception as e:
             logger.error(f"清洗关键词视频列表时出错: {str(e)}")
             # 返回已清洗的视频（可能是部分），而不是抛出异常中断整个流程
-            return []
+            return {
+                'videos': [],
+                'error': str(e),
+            }
 
     def _clean_text(self, text: str) -> str:
         """清洗文本，去除多余空白"""
