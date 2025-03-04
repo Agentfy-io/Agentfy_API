@@ -245,3 +245,106 @@ async def identify_potential_customers(
     except Exception as e:
         logger.error(f"识别潜在客户时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+
+@router.post(
+    "/fetch_keyword_potential_customers",
+    summary="获取关键词搜索视频中的购买需求客户信息",
+    description="""
+用途:
+   * 根据关键词搜索视频并识别其中具有购买意向的潜在客户
+参数:
+   * keyword: 搜索关键词
+   * batch_size: 每批处理评论数量，默认30
+   * video_concurrency: 视频处理并发数，默认5
+   * ai_concurrency: AI处理并发数，默认5
+   * min_score: 最小购买意向分数，范围0-100，默认50
+   * max_score: 最大购买意向分数，范围1-100，默认100
+   * ins_filter: 是否过滤Instagram为空的用户，默认False
+   * twitter_filter: 是否过滤Twitter为空的用户，默认False
+   * region_filter: 按地区过滤用户，默认不过滤
+   * max_customers: 最大返回客户数量，默认不限制
+返回:
+   * 潜在客户信息（关键词、客户列表、统计数据）
+""",
+    response_model_exclude_none=True,
+)
+async def identify_keyword_potential_customers(
+        request: Request,
+        keyword: str = Query(..., description="搜索关键词"),
+        batch_size: int = Query(30, description="每批处理评论数量"),
+        video_concurrency: int = Query(5, description="视频处理并发数"),
+        ai_concurrency: int = Query(5, description="AI处理并发数"),
+        min_score: float = Query(50.0, description="最小购买意向分数，范围0-100"),
+        max_score: float = Query(100.0, description="最大购买意向分数，范围1-100"),
+        ins_filter: bool = Query(False, description="是否过滤Instagram为空的用户"),
+        twitter_filter: bool = Query(False, description="是否过滤Twitter为空的用户"),
+        region_filter: Optional[str] = Query(None, description="按地区过滤用户"),
+        max_customers: Optional[int] = Query(None, description="最大返回客户数量"),
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    根据关键词搜索视频并识别其中具有购买意向的潜在客户
+
+    - **keyword**: 搜索关键词
+    - **batch_size**: 每批处理的评论数量，默认为30
+    - **video_concurrency**: 视频处理并发数，默认为5
+    - **ai_concurrency**: AI处理并发数，默认为5
+    - **min_score**: 最小购买意向分数，范围0-100，默认为50
+    - **max_score**: 最大购买意向分数，范围1-100，默认为100
+    - **ins_filter**: 是否过滤Instagram为空的用户，默认为False
+    - **twitter_filter**: 是否过滤Twitter为空的用户，默认为False
+    - **region_filter**: 按地区过滤用户，默认不过滤
+    - **max_customers**: 最大返回客户数量，默认不限制
+
+    返回关键词搜索的潜在客户分析结果
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"识别关键词 '{keyword}' 搜索结果中的潜在客户")
+
+        result = await customer_agent.get_keyword_potential_customers(
+            keyword=keyword,
+            batch_size=batch_size,
+            video_concurrency=video_concurrency,
+            ai_concurrency=ai_concurrency,
+            min_score=min_score,
+            max_score=max_score,
+            ins_filter=ins_filter,
+            twitter_filter=twitter_filter,
+            region_filter=region_filter,
+            max_customers=max_customers
+        )
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=result,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except InternalServerError as e:
+        logger.error(f"内部服务器错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ValueError as e:
+        logger.error(f"参数错误: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except RuntimeError as e:
+        logger.error(f"运行时错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"识别关键词潜在客户时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
