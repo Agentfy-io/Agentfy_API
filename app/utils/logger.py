@@ -37,8 +37,16 @@ def setup_logger(name, level=None):
         datefmt='%Y-%m-%d %H:%M:%S'
     )
 
-    # 创建控制台处理器
+    # 创建控制台处理器，并设置UTF-8编码
     console_handler = logging.StreamHandler(sys.stdout)
+    # 解决Windows控制台中文显示问题
+    try:
+        # Python 3.7+
+        console_handler.stream.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # 对于较旧版本，设置环境变量
+        os.environ["PYTHONIOENCODING"] = "utf-8"
+
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
 
@@ -46,11 +54,12 @@ def setup_logger(name, level=None):
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # 创建文件处理器 (每个文件最大10MB，保留10个备份文件)
+    # 创建文件处理器 (每个文件最大10MB，保留10个备份文件)，明确指定UTF-8编码
     file_handler = RotatingFileHandler(
         log_dir / f"{name.replace('.', '_')}.log",
         maxBytes=10 * 1024 * 1024,  # 10MB
-        backupCount=10
+        backupCount=10,
+        encoding='utf-8'  # 明确指定UTF-8编码
     )
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
