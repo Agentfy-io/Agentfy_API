@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+@file: main.py
+@desc: FastAPI应用入口
+@auth: Callmeiks
+"""
+
 import os
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -108,7 +115,6 @@ async def logging_middleware(request: Request, call_next):
     return await log_request_middleware(request, call_next)
 
 
-# 自定义OpenAPI架构，添加安全定义
 def custom_openapi():
     if app.openapi_schema:
         return app.openapi_schema
@@ -123,16 +129,16 @@ def custom_openapi():
     # 添加安全定义
     openapi_schema["components"] = openapi_schema.get("components", {})
     openapi_schema["components"]["securitySchemes"] = {
-        "SessionAuth": {
-            "type": "apiKey",
-            "in": "header",
-            "name": "X-Session-ID",
-            "description": "会话ID认证，在登录后获取"
+        "TikHubBearer": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "API Key",
+            "description": "输入您的TikHub API密钥"
         }
     }
 
     # 全局安全要求
-    openapi_schema["security"] = [{"SessionAuth": []}]
+    openapi_schema["security"] = [{"TikHubBearer": []}]
 
     app.openapi_schema = openapi_schema
     return app.openapi_schema
