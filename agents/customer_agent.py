@@ -22,6 +22,8 @@ from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from services.cleaner.comment_cleaner import CommentCleaner
 from services.crawler.comment_crawler import CommentCollector
+from services.crawler.video_crawler import VideoCollector
+from services.cleaner.video_cleaner import VideoCleaner
 from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 
@@ -137,10 +139,8 @@ class CustomerAgent:
 
             # 清洗评论
             comment_cleaner = CommentCleaner()
-            cleaned_comments = await comment_cleaner.clean_video_comments(
-                aweme_id,
-                comments.get('comments', [])
-            )
+            cleaned_comments = await comment_cleaner.clean_video_comments(comments)
+            cleaned_comments = cleaned_comments.get('comments', [])
 
             processing_time = time.time() - start_time
 
@@ -593,8 +593,12 @@ class CustomerAgent:
             self,
             aweme_id: str,
             batch_size: int = 30,
+            concurrency: int = 5,
             min_score: float = 50.0,
-            max_score: float = 100.0
+            max_score: float = 100.0,
+            ins_filter: bool = False,
+            twitter_filter: bool = False,
+            region_filter: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         计算潜在客户的参与度分数，并识别潜在客户
@@ -602,8 +606,12 @@ class CustomerAgent:
         Args:
             aweme_id (str): 视频ID
             batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): ai处理并发数，默认5
             min_score (float, optional): 最小参与度分数，默认50.0
-            max_score (float, optional): 最大参与度分数，默认100.0
+            max_score (float, optional):f 最大参与度分数，默认100.0
+            ins_filter (bool, optional): 是否过滤Instagram为Null用户，默认False
+            twitter_filter (bool, optional): 是否过滤Twitter为Null用户，默认False
+            region_filter (Optional[str], optional): 过滤特定地区的用户，默认None
 
         Returns:
             Dict[str, Any]: 潜在客户信息
@@ -632,13 +640,30 @@ class CustomerAgent:
                     'analysis_timestamp': datetime.now().isoformat(),
                 }
 
-            comments_df = pd.DataFrame(cleaned_comments['comments'])
+            cleaned_comments = cleaned_comments.get('comments', [])
+            comments_df = pd.DataFrame(cleaned_comments)
 
+            # 过滤条件
+            if ins_filter:
+                comments_df = comments_df[comments_df['ins_id']!= '']
+            if twitter_filter:
+                comments_df = comments_df[comments_df['twitter_id']!= '']
+            if region_filter:
+                comments_df = comments_df[comments_df['commenter_region'] == region_filter]
+            if comments_df.empty:
+                logger.warning(f"视频 {aweme_id} 没有符合过滤条件的评论")
+                return {
+                    'aweme_id': aweme_id,
+                    'error': 'No comments found after filtering',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                }
             logger.info(f"开始分析视频 {aweme_id} 的 {len(comments_df)} 条评论以识别潜在客户")
+
             analyzed_df = await self.analyze_comments_batch(
                 comments_df,
                 'purchase_intent',
-                batch_size
+                batch_size,
+                concurrency
             )
 
             if analyzed_df.empty:
@@ -655,18 +680,21 @@ class CustomerAgent:
                     )
 
                     # 检查必填字段
-                    user_id = row.get('commenter_uniqueId')
-                    sec_uid = row.get('commenter_secuid')
+                    user_id = row.get('commenter_uniqueId', '')
+                    sec_uid = row.get('commenter_secuid', '')
                     text = row.get('text')
 
-                    if not all([user_id, sec_uid, text]):
-                        logger.warning(f"评论数据缺少必要字段，跳过: {row}")
-                        continue
+                    #if not all([user_id, sec_uid, text]):
+                    #    logger.warning(f"评论数据缺少必要字段，跳过: {row}")
+                    #    continue
 
                     potential_customers.append({
                         'user_uniqueID': user_id,
                         'potential_value': potential_value,
                         'user_secuid': sec_uid,
+                        'ins_id': row.get('ins_id', ''),
+                        'twitter_id': row.get('twitter_id', ''),
+                        'region': row.get('commenter_region', ''),
                         'text': text
                     })
                 except Exception as e:
@@ -794,7 +822,7 @@ class CustomerAgent:
         except Exception as e:
             logger.error(f"计算参与度分数时出错: {str(e)}")
             # 返回默认值
-            return 0.0            return 0.0
+            return 0.0
 
     async def get_keyword_potential_customers(
             self,
@@ -930,5 +958,23 @@ class CustomerAgent:
             logger.error(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
             raise RuntimeError(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
 
+
+
+
+async def main():
+    # 创建CustomerAgent实例
+    agent = CustomerAgent()
+
+    # 示例：获取keyword潜在客户
+    keyword = "red liptick"
+    potential_customers = await agent.get_keyword_potential_customers(keyword,20, 5, 5, 0, 100.0, True, False, 'US', 100)
+
+    #save to json
+    with open('potential_customers.json', 'w', encoding='utf-8') as f:
+        json.dump(potential_customers, f, ensure_ascii=False, indent=4)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
 
