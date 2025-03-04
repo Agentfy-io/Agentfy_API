@@ -1,3 +1,4 @@
+import aiohttp
 from fastapi import Depends, Header, HTTPException, Request
 from typing import Optional
 from datetime import datetime
@@ -109,3 +110,39 @@ async def log_request_middleware(request: Request, call_next):
     )
 
     return response
+
+
+async def verify_tikhub_api_key(request: Request):
+    """验证TikHub API Key并返回有效的Key"""
+    # 从请求头获取认证信息
+    authorization = request.headers.get("Authorization")
+
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="请提供有效的TikHub API密钥，格式: Bearer YOUR_API_KEY")
+
+    api_key = authorization.replace("Bearer ", "")
+
+    # 验证API密钥是否有效
+    base_url = "https://api.tikhub.io"  # 或从设置中获取
+    test_url = f"{base_url}/api/v1/tikhub/user/get_user_info"
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(test_url, headers=headers) as response:
+                if response.status == 200:
+                    return api_key
+                elif response.status == 401:
+                    logger.warning(f"TikHub API密钥无效: {api_key[:5]}...")
+                    raise HTTPException(status_code=401, detail="TikHub API密钥无效")
+                else:
+                    logger.warning(f"TikHub API验证请求返回状态码: {response.status}")
+                    # 暂时允许其他状态码通过，可能是TikHub API的临时问题
+                    return api_key
+    except Exception as e:
+        logger.error(f"验证TikHub API密钥时出错: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"验证TikHub API密钥时发生错误: {str(e)}")

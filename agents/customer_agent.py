@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+"""
+@file: customer_agent.py
+@desc: 处理TikTok评论的代理类，提供评论获取、分析和潜在客户识别功能
+@auth: Callmeiks
+"""
+
 import json
 import re
 from datetime import datetime
@@ -33,16 +40,16 @@ class CustomerAgent:
         初始化CommentAgent，加载API密钥和提示模板
 
         Args:
-            tikhub_api_key: TikHub API密钥，如果不提供则使用环境变量中的默认值
-            tikhub_base_url: TikHub API基础URL，如果不提供则使用环境变量中的默认值
+            tikhub_api_key: TikHub API密钥
+            tikhub_base_url: TikHub API基础URL
         """
         # 初始化AI模型客户端
         self.chatgpt = ChatGPT()
         self.claude = Claude()
 
         # 保存TikHub API配置
-        self.tikhub_api_key = tikhub_api_key or settings.TIKHUB_API_KEY
-        self.tikhub_base_url = tikhub_base_url or settings.TIKHUB_BASE_URL
+        self.tikhub_api_key = tikhub_api_key
+        self.tikhub_base_url = tikhub_base_url
 
         # 如果没有提供TikHub API密钥，记录警告
         if not self.tikhub_api_key:

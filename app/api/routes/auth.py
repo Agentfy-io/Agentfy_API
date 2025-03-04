@@ -26,7 +26,6 @@ router = APIRouter(prefix="/auth")
 async def login(
         request: Request,
         tikhub_api_key: str = Form(..., description="TikHub API密钥"),
-        tikhub_base_url: str = Form("https://api.tikhub.io", description="TikHub API基础URL")
 ):
     """
     用户认证
@@ -42,13 +41,11 @@ async def login(
         # 验证用户输入
         user_auth = UserAuth(
             tikhub_api_key=tikhub_api_key,
-            tikhub_base_url=tikhub_base_url
         )
 
         # 验证TikHub API密钥
         is_valid = await AuthService.verify_tikhub_api_key(
             user_auth.tikhub_api_key,
-            user_auth.tikhub_base_url
         )
 
         if not is_valid:
@@ -57,7 +54,6 @@ async def login(
         # 创建会话
         session_id, expires_at = await AuthService.create_session(
             user_auth.tikhub_api_key,
-            user_auth.tikhub_base_url
         )
 
         # 记录认证成功
