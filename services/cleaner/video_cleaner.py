@@ -1,70 +1,89 @@
-# data_cleaning.py
-import os
-from typing import Dict, Any, List, Tuple
-
-import pandas as pd
-import json
-from pathlib import Path
+from typing import Dict, Any, List, Optional
 import asyncio
-import aiofiles
 
-import
-from utils.logger import logger
+from app.utils.logger import setup_logger
+from app.core.exceptions import ValidationError
+
+# 设置日志记录器
+logger = setup_logger(__name__)
 
 
 class VideoCleaner:
+    """TikTok视频清洗器，负责处理和标准化原始视频数据"""
 
-    async def clean_one_video(self, video_data:Dict) -> Dict[str, Any]:
+    async def clean_one_video(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Clean and process raw video data for a specific video
+        清洗和处理单个视频的原始数据
 
-        Parameters:
-        - data (Dict[str, Any]): Required. Raw video data containing 'aweme_id' and 'video_info'
+        Args:
+            video_data: 原始视频数据
+
+        Returns:
+            清洗后的视频数据
+
+        Raises:
+            ValidationError: 当输入数据无效时
         """
-
         if not video_data:
-            raise ValueError("data parameter is required")
+            raise ValidationError(detail="视频数据不能为空", field="video_data")
+
+        aweme_id = video_data.get('aweme_id', '')
+        if not aweme_id:
+            raise ValidationError(detail="视频ID不能为空", field="aweme_id")
+
         try:
-            logger.info(f"Cleaning video aweme_id: {video_data.get('aweme_id', '')}")
-            # Clean and process video data
+            logger.info(f"清洗视频 {aweme_id}")
+
+            # 处理标签列表
             cha_list = video_data.get('cha_list', [])
             content_desc_extra = video_data.get('content_desc_extra', {})
-            cha_list_cleaned = hashtags = []
+            cha_list_cleaned = []
+            hashtags = []
+
             if cha_list:
                 cha_list_cleaned = [{'cid': cha.get('cid', ''), 'title': cha.get('cha_name', '')} for cha in cha_list]
-            if content_desc_extra:
-                hashtags = [{'hashtag_id': tag.get('id', ''), 'name': tag.get('name', '')} for tag in content_desc_extra]
 
-            # remove empty values
+            if content_desc_extra:
+                hashtags = [{'hashtag_id': tag.get('id', ''), 'name': tag.get('name', '')} for tag in
+                            content_desc_extra]
+
+            # 移除空值
             hashtags = [tag for tag in hashtags if tag['name']]
 
+            # 创建清洗后的视频对象
+            music_info = video_data.get("added_sound_music_info", {}) or {}
+            author_info = video_data.get('author', {}) or {}
+            statistics = video_data.get('statistics', {}) or {}
+            status = video_data.get('status', {}) or {}
+            video_info = video_data.get('video', {}) or {}
+
             cleaned_video = {
-                'music':{
-                    'id': video_data.get("added_sound_music_info", {}).get('mid', ''),
-                    'title': video_data.get("added_sound_music_info", {}).get('title', ''),
-                    'owner_id': video_data.get("added_sound_music_info", {}).get('owner_id', ''),
-                    'owner_nickname': video_data.get("added_sound_music_info", {}).get('owner_nickname', ''),
-                    'play_url': video_data.get("added_sound_music_info", {}).get('play_url', {}).get('uri', []),
+                'music': {
+                    'id': music_info.get('mid', ''),
+                    'title': music_info.get('title', ''),
+                    'owner_id': music_info.get('owner_id', ''),
+                    'owner_nickname': music_info.get('owner_nickname', ''),
+                    'play_url': self._get_first_item(music_info.get('play_url', {}).get('uri', [])),
                 },
                 'created_by_ai': video_data.get('aigc_info', {}).get('created_by_ai', False),
-                'author':{
-                    'avatar': video_data.get('author', {}).get('avatar_larger', {}).get('url_list', [])[0],
-                    'sec_uid': video_data.get('author', {}).get('sec_uid', ''),
-                    'nickname': video_data.get('author', {}).get('nickname', ''),
-                    'unique_id': video_data.get('author', {}).get('unique_id', ''),
-                    'uid': video_data.get('author', {}).get('uid', ''),
-                    'youtube_channel_id': video_data.get('author', {}).get('youtube_channel_id', ''),
-                    'youtube_channel_title': video_data.get('author', {}).get('youtube_channel_title', ''),
-                    'ins_id': video_data.get('author', {}).get('ins_id', ''),
-                    'twitter_id': video_data.get('author', {}).get('twitter_id', ''),
-                    'twitter_name': video_data.get('author', {}).get('twitter_name', ''),
-                    'region': video_data.get('author', {}).get('region', ''),
+                'author': {
+                    'avatar': self._get_first_item(author_info.get('avatar_larger', {}).get('url_list', [])),
+                    'sec_uid': author_info.get('sec_uid', ''),
+                    'nickname': author_info.get('nickname', ''),
+                    'unique_id': author_info.get('unique_id', ''),
+                    'uid': author_info.get('uid', ''),
+                    'youtube_channel_id': author_info.get('youtube_channel_id', ''),
+                    'youtube_channel_title': author_info.get('youtube_channel_title', ''),
+                    'ins_id': author_info.get('ins_id', ''),
+                    'twitter_id': author_info.get('twitter_id', ''),
+                    'twitter_name': author_info.get('twitter_name', ''),
+                    'region': author_info.get('region', ''),
                 },
-                'aweme_id': video_data.get('aweme_id', ''),
+                'aweme_id': aweme_id,
                 'cha_list': cha_list_cleaned,
                 'hashtags': hashtags,
                 'content_type': video_data.get('content_type', ''),
-                'desc': video_data.get('desc', ''),
+                'desc': self._clean_text(video_data.get('desc', '')),
                 'create_time': video_data.get('create_time', ''),
                 'group_id': video_data.get('group_id', ''),
                 'has_vs_entry': video_data.get('has_vs_entry', False),
@@ -79,97 +98,142 @@ class VideoCleaner:
                 'region': video_data.get('region', ''),
                 'share_url': video_data.get('share_info', {}).get('share_url', ''),
                 'share_desc': video_data.get('share_info', {}).get('share_desc', ''),
-                'statistics':{
-                    'collect_count': video_data.get('statistics', {}).get('collect_count', 0),
-                    'comment_count': video_data.get('statistics', {}).get('comment_count', 0),
-                    'digg_count': video_data.get('statistics', {}).get('digg_count', 0),
-                    'download_count': video_data.get('statistics', {}).get('download_count', 0),
-                    'play_count': video_data.get('statistics', {}).get('play_count', 0),
-                    'share_count': video_data.get('statistics', {}).get('share_count', 0),
+                'statistics': {
+                    'collect_count': self._parse_int(statistics.get('collect_count', 0)),
+                    'comment_count': self._parse_int(statistics.get('comment_count', 0)),
+                    'digg_count': self._parse_int(statistics.get('digg_count', 0)),
+                    'download_count': self._parse_int(statistics.get('download_count', 0)),
+                    'play_count': self._parse_int(statistics.get('play_count', 0)),
+                    'share_count': self._parse_int(statistics.get('share_count', 0)),
                 },
-                'is_reviewing': video_data.get('status', {}).get('is_reviewing', False),
-                'is_prohibited': video_data.get('status', {}).get('is_prohibited', False),
-                'is_delete': video_data.get('status', {}).get('is_delete', False),
-                'reviewed': video_data.get('status', {}).get('reviewed', False),
-                'play_address': video_data.get('video', {}).get('play_addr', {}).get('url_list', [])[0],
-                'duration': video_data.get('video', {}).get('duration', 0),
-                'allow_download': video_data.get('video', {}).get('allow_download', False),
+                'is_reviewing': status.get('is_reviewing', False),
+                'is_prohibited': status.get('is_prohibited', False),
+                'is_delete': status.get('is_delete', False),
+                'reviewed': status.get('reviewed', False),
+                'play_address': self._get_first_item(video_info.get('play_addr', {}).get('url_list', [])),
+                'duration': self._parse_int(video_info.get('duration', 0)),
+                'allow_download': video_info.get('allow_download', False),
             }
 
             return cleaned_video
-        except Exception as e:
-            logger.error(f"Error cleaning video data: {str(e)}")
+
+        except ValidationError:
+            # 直接向上传递验证错误
             raise
-
-    async def clean_hashtag_videos(self, video_data:Dict) -> List[Dict[str, Any]]:
-        """
-        Clean and process raw video data for a specific hashtag
-
-        Parameters:
-        - data (Dict[str, Any]): Required. Raw video data containing 'chi_id' and 'video_list'
-        """
-
-        if not video_data:
-            raise ValueError("data parameter is required")
-        try:
-            # Clean and process video data
-            cleaned_videos = []
-            for video in video_data:
-                cleaned_video = await self.clean_one_video(data=video)
-                cleaned_videos.append(cleaned_video)
-            logger.info(f"Cleaned {len(cleaned_videos)} videos for hashtag")
-            return cleaned_videos
         except Exception as e:
-            logger.error(f"Error cleaning hashtag video data: {str(e)}")
-            raise
+            logger.error(f"清洗视频 {aweme_id} 数据时出错: {str(e)}")
+            # 返回基本数据，不中断流程
+            return {
+                'aweme_id': aweme_id,
+                'error': str(e),
+                'processed': False
+            }
 
-    async def clean_keyword_videos(self, video_data:Dict) -> List[Dict[str, Any]]:
+    async def clean_hashtag_videos(self, video_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """
-        Clean and process raw video data for a specific keyword
+        清洗和处理话题标签视频列表
 
-        Parameters:
-        - data (Dict[str, Any]): Required. Raw video data containing 'keyword' and 'video_list'
+        Args:
+            video_list: 原始视频列表数据
+
+        Returns:
+            清洗后的视频列表
+
+        Raises:
+            ValidationError: 当输入数据无效时
         """
+        if not isinstance(video_list, list):
+            raise ValidationError(detail="视频列表必须是列表格式", field="video_list")
 
-        if not video_data:
-            raise ValueError("data parameter is required")
         try:
-            # Clean and process video data
+            # 清洗和处理视频列表
             cleaned_videos = []
-            for video in video_data:
-                video = video.get('aweme_info', {})
-                if not video:
-                    logger.error("Invalid video data format")
+            failed_count = 0
+
+            for video in video_list:
+                try:
+                    cleaned_video = await self.clean_one_video(video)
+                    if cleaned_video:
+                        cleaned_videos.append(cleaned_video)
+                except Exception as e:
+                    logger.error(f"清洗话题视频时出错: {str(e)}")
+                    failed_count += 1
                     continue
-                cleaned_video = await self.clean_one_video(data=video)
-                cleaned_videos.append(cleaned_video)
+
+            logger.info(f"已成功清洗 {len(cleaned_videos)} 个话题视频，失败 {failed_count} 个")
             return cleaned_videos
-        except Exception as e:
-            logger.error(f"Error cleaning keyword video data: {str(e)}")
+
+        except ValidationError:
+            # 直接向上传递验证错误
             raise
+        except Exception as e:
+            logger.error(f"清洗话题视频列表时出错: {str(e)}")
+            # 返回已清洗的视频（可能是部分），而不是抛出异常中断整个流程
+            return []
 
-if __name__ == '__main__':
-    # load json data, uf8
-    with open('../../results/video_test/video_data.json', 'r', encoding='utf-8') as f:
-        video_data = json.load(f)
+    async def clean_keyword_videos(self, video_list: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        清洗和处理关键词搜索视频列表
 
-    with open('../../results/video_test/hashtag_videos.json', 'r', encoding='utf-8') as f:
-        hashtag_data = json.load(f)
+        Args:
+            video_list: 原始视频列表数据
 
-    with open('../../results/video_test/keyword_videos.json', 'r', encoding='utf-8') as f:
-        keyword_data = json.load(f)
+        Returns:
+            清洗后的视频列表
 
-    cleaner = VideoCleaner()
-    cleaned_video = asyncio.run(cleaner.clean_one_video(data=video_data))
-    cleaned_hashtag_videos = asyncio.run(cleaner.clean_hashtag_videos(data=hashtag_data))
-    cleaned_keyword_videos = asyncio.run(cleaner.clean_keyword_videos(data=keyword_data))
+        Raises:
+            ValidationError: 当输入数据无效时
+        """
+        if not isinstance(video_list, list):
+            raise ValidationError(detail="视频列表必须是列表格式", field="video_list")
 
-    #save cleaned data, ut8
-    with open('../../results/video_test/cleaned_video.json', 'w', encoding='utf-8') as f:
-        json.dump(cleaned_video, f, ensure_ascii=False, indent=4)
+        try:
+            # 清洗和处理视频列表
+            cleaned_videos = []
+            failed_count = 0
 
-    with open('../../results/video_test/cleaned_hashtag_videos.json', 'w', encoding='utf-8') as f:
-        json.dump(cleaned_hashtag_videos, f, ensure_ascii=False, indent=4)
+            for video in video_list:
+                try:
+                    video_info = video.get('aweme_info', {})
+                    if not video_info:
+                        logger.warning("跳过无效视频数据格式")
+                        failed_count += 1
+                        continue
 
-    with open('../../results/video_test/cleaned_keyword_videos.json', 'w', encoding='utf-8') as f:
-        json.dump(cleaned_keyword_videos, f, ensure_ascii=False, indent=4)
+                    cleaned_video = await self.clean_one_video(video_info)
+                    if cleaned_video:
+                        cleaned_videos.append(cleaned_video)
+                except Exception as e:
+                    logger.error(f"清洗关键词视频时出错: {str(e)}")
+                    failed_count += 1
+                    continue
+
+            logger.info(f"已成功清洗 {len(cleaned_videos)} 个关键词视频，失败 {failed_count} 个")
+            return cleaned_videos
+
+        except ValidationError:
+            # 直接向上传递验证错误
+            raise
+        except Exception as e:
+            logger.error(f"清洗关键词视频列表时出错: {str(e)}")
+            # 返回已清洗的视频（可能是部分），而不是抛出异常中断整个流程
+            return []
+
+    def _clean_text(self, text: str) -> str:
+        """清洗文本，去除多余空白"""
+        if not isinstance(text, str):
+            return ""
+        return text.strip()
+
+    def _parse_int(self, value: Any) -> int:
+        """安全解析整数值"""
+        try:
+            return int(value)
+        except (ValueError, TypeError):
+            return 0
+
+    def _get_first_item(self, list_data: List) -> Any:
+        """安全获取列表的第一个元素"""
+        if isinstance(list_data, list) and list_data:
+            return list_data[0]
+        return ""
