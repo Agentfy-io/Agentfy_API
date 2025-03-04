@@ -146,7 +146,7 @@ class CommentCollector:
             service="TikHub"
         )
 
-    async def collect_video_comments(self, aweme_id: str) -> Dict[str, Union[str, List[Any], None]]:
+    async def collect_video_comments(self, aweme_id: str) -> Dict[str, Any]:
         """
         收集特定视频的评论
 

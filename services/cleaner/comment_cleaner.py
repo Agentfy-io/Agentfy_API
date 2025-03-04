@@ -14,9 +14,8 @@ class CommentCleaner:
 
     async def clean_video_comments(
             self,
-            aweme_id: str,
             comments: List[Dict[str, Any]]
-    ) -> List[Dict[str, Any]]:
+    ) -> Dict[str, Any]:
         """
         清洗和处理特定视频的原始评论
 
@@ -30,6 +29,7 @@ class CommentCleaner:
         Raises:
             ValidationError: 当输入数据无效时
         """
+        aweme_id = comments.get('aweme_id', '')
         if not aweme_id:
             raise ValidationError(detail="视频ID不能为空", field="aweme_id")
 
@@ -69,7 +69,11 @@ class CommentCleaner:
                     logger.warning(f"跳过无效评论: 缺少ID或文本")
 
             logger.info(f"成功清洗视频 {aweme_id} 的 {len(cleaned_comments)} 条评论")
-            return cleaned_comments
+            return {
+                'aweme_id': aweme_id,
+                'comments': cleaned_comments,
+                'total_comments': len(cleaned_comments),
+            }
 
         except Exception as e:
             logger.error(f"清洗视频 {aweme_id} 评论时出错: {str(e)}")
