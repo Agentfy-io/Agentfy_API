@@ -794,4 +794,141 @@ class CustomerAgent:
         except Exception as e:
             logger.error(f"计算参与度分数时出错: {str(e)}")
             # 返回默认值
-            return 0.0
+            return 0.0            return 0.0
+
+    async def get_keyword_potential_customers(
+            self,
+            keyword: str,
+            batch_size: int = 30,
+            video_concurrency: int = 5,
+            ai_concurrency: int = 5,
+            min_score: float = 50.0,
+            max_score: float = 100.0,
+            ins_filter: bool = False,
+            twitter_filter: bool = False,
+            region_filter: Optional[str] = None,
+            max_customers: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """
+        根据关键词获取潜在客户
+
+        Args:
+            keyword (str): 关键词
+            batch_size (int, optional): 每批处理的评论数量，默认30
+            video_concurrency (int, optional): 视频处理并发数，默认5
+            ai_concurrency (int, optional): ai处理并发数，默认5
+            min_score (float, optional): 最小参与度分数，默认50.0
+            max_score (float, optional): 最大参与度分数，默认100.0
+            ins_filter (bool, optional): 是否过滤Instagram为空用户，默认False
+            twitter_filter (bool, optional): 是否过滤Twitter为空用户，默认False
+            region_filter (str, optional): 地区过滤，默认None
+            max_customers (int, optional): 最大潜在客户数量，默认None, None表示不限制
+
+        Returns:
+            Dict[str, Any]: 潜在客户信息
+
+        Raises:
+            ValueError: 当参数无效时
+            RuntimeError: 当分析过程中出现错误时
+        """
+        try:
+            # 参数验证
+            if not keyword:
+                raise ValueError("keyword不能为空")
+
+            if min_score < 0 or max_score > 100 or min_score >= max_score:
+                raise ValueError("分数范围无效，应该满足: 0 <= min_score < max_score <= 100")
+
+            # 获取清理后的视频数据
+            video_collector = VideoCollector(self.tikhub_api_key, self.tikhub_base_url)
+            video_cleaner = VideoCleaner()
+            raw_videos = await video_collector.collect_videos_by_keyword(keyword)
+            cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
+
+            if not cleaned_videos.get('videos'):
+                logger.warning(f"未找到与关键词 {keyword} 相关的视频")
+                return {
+                    'keyword': keyword,
+                    'error': '没有找到相关视频',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                }
+
+            videos_df = pd.DataFrame(cleaned_videos['videos'])
+            aweme_ids = videos_df['aweme_id'].tolist()
+
+            logger.info(f"开始分析与关键词 {keyword} 相关的 {len(videos_df)} 个视频以识别潜在客户")
+
+            # 使用get_potential_customers方法分析每个视频，每concurrency个视频为一组，
+            potential_customers = []
+            for i in range(0, len(aweme_ids), video_concurrency):
+                batch_aweme_ids = aweme_ids[i:i + video_concurrency]
+                tasks = [
+                    self.get_potential_customers(
+                        aweme_id,
+                        batch_size,
+                        ai_concurrency,
+                        min_score,
+                        max_score,
+                        ins_filter,
+                        twitter_filter,
+                        region_filter,
+                    ) for aweme_id in batch_aweme_ids
+                ]
+
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                for result in batch_results:
+                    if isinstance(result, Exception):
+                        logger.error(f"处理视频 {batch_aweme_ids} 时出错: {str(result)}")
+                        continue
+
+                    if result.get('potential_customers') is None:
+                        logger.warning(f"视频 {batch_aweme_ids} 没有潜在客户数据")
+                        continue
+
+                    potential_customers.extend(result['potential_customers'])
+                    if len(potential_customers) >= max_customers:
+                        break
+                if len(potential_customers) >= max_customers:
+                    break
+            # 创建潜在客户DataFrame
+            if not potential_customers:
+                logger.warning(f"未找到任何潜在客户")
+                return {
+                    'keyword': keyword,
+                    'total_potential_customers': 0,
+                    'min_engagement_score': min_score,
+                    'max_engagement_score': max_score,
+                    'average_potential_value': 0,
+                    'potential_customers': []
+                }
+
+            potential_customers_df = pd.DataFrame(potential_customers)
+            # 根据潜在价值过滤和排序
+            filtered_df = potential_customers_df[
+                potential_customers_df['potential_value'].between(min_score, max_score)
+            ].sort_values(by='potential_value', ascending=False)
+
+            avg_value = filtered_df['potential_value'].mean() if not filtered_df.empty else 0
+
+            return {
+                'keyword': keyword,
+                'total_potential_customers': len(filtered_df),
+                'min_engagement_score': min_score,
+                'max_engagement_score': max_score,
+                'average_potential_value': round(avg_value, 2),
+                'potential_customers': filtered_df.to_dict(orient='records'),
+                'analysis_timestamp': datetime.now().isoformat()
+            }
+        except ValueError:
+            # 直接向上传递验证错误
+            raise ValueError
+        except RuntimeError:
+            # 直接向上传递运行时错误
+            raise RuntimeError
+        except Exception as e:
+            logger.error(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
+            raise RuntimeError(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
+
+
+
