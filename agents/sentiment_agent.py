@@ -96,11 +96,48 @@ class SentimentAgent:
                 Respond with a JSON array containing analysis for all comments.
                 """,
 
+            "relationship": """You are an AI trained to analyze audience sentiment and engagement toward an influencer or creator. Your task is to assess how commenters perceive and interact with the influencer.
+                For each comment, analyze:
+                1. **Trust Level:** (loyal fan, skeptical, indifferent)
+                2. **Tone Toward Influencer/Brand:** (supportive, critical, neutral)
+                3. **Fandom Level:** (casual viewer, superfan, first-time viewer)
+                4. **Previous Knowledge of Influencer:** (new follower, returning audience, long-time fan)
+                5. **Engagement Type:** (praise, criticism, joke, curiosity, casual remark)
+                
+                **JSON Output Format:**
+                [
+                    {
+                        "comment_id": "comment ID from input data",
+                        "text": "comment text",
+                        "trust_level": "loyal_fan/skeptical/indifferent",
+                        "tone_toward_influencer": "supportive/critical/neutral",
+                        "fandom_level": "casual_viewer/superfan/first_time_viewer",
+                        "previous_knowledge": "new_follower/returning_audience/long_time_fan",
+                        "engagement_type": "praise/criticism/joke/curiosity/casual_remark",
+                    }
+                ]
+                
+                **Guidelines:**
+                - Identify loyalty through repeated engagement or references to past content.
+                - Detect tone based on word choice, punctuation, and emojis.
+                - Recognize when users joke, question, or provide constructive criticism.
+                - Assess engagement depth (quick reaction vs. detailed discussion).
+                
+                Respond with a JSON array containing the analysis for all comments.
+                """
+        }
+
     def _load_user_prompts(self) -> None:
         """加载用户提示用于不同的评论分析类型"""
         self.user_prompts = {
             'sentiment': {
                 'description': "sentiment and engagement analysis",
+            },
+            'relationship': {
+                'description': "relationship and engagement analysis",
+            }
+        }
+
     async def fetch_video_comments(self, aweme_id: str) -> Dict[str, Any]:
         """
         获取指定视频的清理后的评论数据
@@ -578,4 +615,287 @@ class SentimentAgent:
                 'average_themes_per_comment': round(len(all_themes) / len(df), 2)
             }
         }
+
+    async def analyze_relationship(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[str, Any]:
+        """
+        分析指定视频的评论中的关系和互动
+
+        Args:
+            aweme_id (str): 视频ID
+            batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): 并发处理的批次数量，默认5
+
+        Returns:
+            Dict[str, Any]: 关系分析结果
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当分析过程中出现错误时
+        """
+        try:
+            if not aweme_id:
+                raise ValidationError(detail="aweme_id不能为空", field="aweme_id")
+
+            if batch_size <= 0 or batch_size > settings.MAX_BATCH_SIZE:
+                raise ValidationError(
+                    detail=f"batch_size必须在1和{settings.MAX_BATCH_SIZE}之间",
+                    field="batch_size"
+                )
+
+            # 获取清理后的评论数据
+            comments_data = await self.fetch_video_comments(aweme_id)
+
+            if not comments_data.get('comments'):
+                logger.warning(f"视频 {aweme_id} 没有评论数据")
+                return {
+                    'aweme_id': aweme_id,
+                    'error': 'No comments found',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                }
+
+            comments_df = pd.DataFrame(comments_data['comments'])
+
+            logger.info(f"开始分析视频 {aweme_id} 的评论关系")
+            analyzed_df = await self.analyze_comments_batch(comments_df, 'relationship', batch_size, concurrency)
+
+            if analyzed_df.empty:
+                raise InternalServerError("未获得有效的关系分析结果")
+
+            analysis_summary = {
+                'trust_analysis': self.analyze_trust_metrics(analyzed_df),
+                'tone_analysis': self.analyze_audience_tone(analyzed_df),
+                'fandom_analysis': self.analyze_fandom_composition(analyzed_df),
+                'engagement_analysis': self.analyze_engagement_patterns(analyzed_df),
+                'segment_analysis': self.analyze_audience_segments(analyzed_df),
+                'meta': {
+                    'total_comments': len(analyzed_df),
+                    'video_id': aweme_id,
+                    'analysis_type': 'relationship',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                }
+            }
+
+            return analysis_summary
+        except (ValidationError, ExternalAPIError, InternalServerError) as e:
+            # 直接向上传递这些已处理的错误
+            logger.error(f"分析视频评论关系时出错: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"分析视频评论关系时发生未预期错误: {str(e)}")
+            raise InternalServerError(detail=f"分析视频评论关系时发生未预期错误: {str(e)}")
+
+    def analyze_trust_metrics(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """分析受众信任度指标"""
+        trust_counts = df['trust_level'].value_counts()
+        total_comments = len(df)
+
+        # 计算信任分数
+        trust_score = (
+                              (len(df[df['trust_level'] == 'loyal_fan']) * 1.0 +
+                               len(df[df['trust_level'] == 'indifferent']) * 0.5 +
+                               len(df[df['trust_level'] == 'skeptical']) * 0.0) / total_comments
+                      ) * 100
+
+        return {
+            'trust_distribution': {
+                level: {
+                    'count': int(count),
+                    'percentage': round(count / total_comments * 100, 2)
+                }
+                for level, count in trust_counts.items()
+            },
+            'trust_metrics': {
+                'overall_trust_score': round(trust_score, 2),
+                'loyal_fan_ratio': round(len(df[df['trust_level'] == 'loyal_fan']) / total_comments * 100, 2),
+                'skepticism_ratio': round(len(df[df['trust_level'] == 'skeptical']) / total_comments * 100, 2)
+            },
+            'key_findings': {
+                'dominant_trust_level': trust_counts.index[0],
+                'trust_trend': 'positive' if trust_score > 60 else 'neutral' if trust_score > 40 else 'concerning'
+            }
+        }
+
+    def analyze_audience_tone(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """分析受众态度倾向"""
+        tone_counts = df['tone_toward_influencer'].value_counts()
+        tone_by_trust = pd.crosstab(df['tone_toward_influencer'], df['trust_level'])
+
+        return {
+            'tone_distribution': {
+                tone: {
+                    'count': int(count),
+                    'percentage': round(count / len(df) * 100, 2)
+                }
+                for tone, count in tone_counts.items()
+            },
+            'tone_by_trust_level': {
+                tone: {
+                    trust_level: int(count)
+                    for trust_level, count in row.items()
+                }
+                for tone, row in tone_by_trust.iterrows()
+            },
+            'sentiment_metrics': {
+                'positivity_ratio': round(
+                    len(df[df['tone_toward_influencer'] == 'supportive']) / len(df) * 100, 2),
+                'criticism_ratio': round(
+                    len(df[df['tone_toward_influencer'] == 'critical']) / len(df) * 100, 2)
+            }
+        }
+
+    def analyze_fandom_composition(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """分析粉丝构成"""
+        fandom_counts = df['fandom_level'].value_counts()
+        knowledge_counts = df['previous_knowledge'].value_counts()
+
+        # 粉丝忠诚度矩阵
+        loyalty_matrix = pd.crosstab(
+            df['fandom_level'],
+            df['previous_knowledge']
+        )
+
+        return {
+            'fandom_distribution': {
+                level: {
+                    'count': int(count),
+                    'percentage': round(count / len(df) * 100, 2)
+                }
+                for level, count in fandom_counts.items()
+            },
+            'audience_history': {
+                knowledge: {
+                    'count': int(count),
+                    'percentage': round(count / len(df) * 100, 2)
+                }
+                for knowledge, count in knowledge_counts.items()
+            },
+            'loyalty_patterns': {
+                fandom: {
+                    knowledge: int(count)
+                    for knowledge, count in row.items()
+                }
+                for fandom, row in loyalty_matrix.iterrows()
+            },
+            'audience_metrics': {
+                'superfan_ratio': round(len(df[df['fandom_level'] == 'superfan']) / len(df) * 100, 2),
+                'new_audience_ratio': round(
+                    len(df[df['previous_knowledge'] == 'new_follower']) / len(df) * 100, 2),
+                'retention_indicator': round(
+                    len(df[df['previous_knowledge'].isin(['returning_audience', 'long_time_fan'])]) / len(
+                        df) * 100, 2)
+            }
+        }
+
+    def analyze_engagement_patterns_v2(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """分析互动模式"""
+        engagement_counts = df['engagement_type'].value_counts()
+
+        # 互动与粉丝级别的关系
+        engagement_by_fandom = pd.crosstab(
+            df['engagement_type'],
+            df['fandom_level']
+        )
+
+        # 计算深度互动率
+        deep_engagement = len(df[df['engagement_type'].isin(['praise', 'criticism', 'curiosity'])]) / len(df)
+
+        return {
+            'engagement_distribution': {
+                e_type: {
+                    'count': int(count),
+                    'percentage': round(count / len(df) * 100, 2)
+                }
+                for e_type, count in engagement_counts.items()
+            },
+            'engagement_by_fandom': {
+                e_type: {
+                    fandom: int(count)
+                    for fandom, count in row.items()
+                }
+                for e_type, row in engagement_by_fandom.iterrows()
+            },
+            'engagement_metrics': {
+                'deep_engagement_rate': round(deep_engagement * 100, 2),
+                'positive_engagement_ratio': round(
+                    len(df[df['engagement_type'] == 'praise']) / len(df) * 100, 2),
+                'curiosity_ratio': round(len(df[df['engagement_type'] == 'curiosity']) / len(df) * 100,
+                                         2)
+            }
+        }
+
+    def analyze_audience_segments(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """分析受众细分"""
+        # 创建复合特征
+        df['audience_segment'] = df.apply(self._determine_segment, axis=1)
+        segment_counts = df['audience_segment'].value_counts()
+
+        return {
+            'segment_distribution': {
+                segment: {
+                    'count': int(count),
+                    'percentage': round(count / len(df) * 100, 2)
+                }
+                for segment, count in segment_counts.items()
+            },
+            'segment_characteristics': self._analyze_segment_characteristics(df),
+            'segment_engagement': self._analyze_segment_engagement(df),
+        }
+
+    def _determine_segment(self, row) -> str:
+        """确定受众所属细分"""
+        if row['trust_level'] == 'loyal_fan' and row['fandom_level'] == 'superfan':
+            return 'core_community'
+        elif row['previous_knowledge'] == 'new_follower':
+            return 'new_audience'
+        elif row['tone_toward_influencer'] == 'critical':
+            return 'critics'
+        elif row['engagement_type'] in ['curiosity', 'casual_remark']:
+            return 'casual_viewers'
+        else:
+            return 'regular_audience'
+
+    def _analyze_segment_characteristics(self,df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+        """分析各细分受众的特征"""
+        segments = df['audience_segment'].unique()
+        characteristics = {}
+
+        for segment in segments:
+            segment_df =df[df['audience_segment'] == segment]
+            characteristics[segment] = {
+                'trust_level': segment_df['trust_level'].mode()[0],
+                'typical_engagement': segment_df['engagement_type'].mode()[0],
+                'average_fandom_level': segment_df['fandom_level'].mode()[0]
+            }
+
+        return characteristics
+
+    def _analyze_segment_engagement(self, df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+        """分析各细分受众的互动模式"""
+        segments = df['audience_segment'].unique()
+        engagement_patterns = {}
+
+        for segment in segments:
+            segment_df = df[df['audience_segment'] == segment]
+            engagement_patterns[segment] = {
+                'common_engagement_types': segment_df['engagement_type'].value_counts().to_dict(),
+                'engagement_rate': round(len(segment_df) / len(df) * 100, 2)
+            }
+
+        return engagement_patterns
+
+
+
+async def main():
+    # 创建代理
+    agent = SentimentAgent()
+
+    # 分析视频评论情感
+    aweme_id = "123456789"
+    sentiment_analysis = await agent.analyze_sentiment(aweme_id)
+    print(sentiment_analysis)
+
+if __name__ == "__main__":
+    asyncio.run(main())
+
 
