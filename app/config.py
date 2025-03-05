@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+@file: config.py
+@desc: FastAPI应用配置
+"""
 import os
 from pydantic import Field
 from pydantic_settings import BaseSettings
@@ -5,6 +10,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 # 确保环境变量已加载
+
 load_dotenv()
 
 
@@ -15,6 +21,7 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: Optional[str] = Field(None, env="OPENAI_API_KEY")
     ANTHROPIC_API_KEY: Optional[str] = Field(None, env="ANTHROPIC_API_KEY")
     TIKHUB_API_KEY: Optional[str] = Field(None, env="TIKHUB_API_KEY")
+    LEMONFOX_API_KEY: Optional[str] = Field(None, env="LEMONFOX_API_KEY")
 
     # TikHub API 配置
     TIKHUB_BASE_URL: str = Field("https://api.tikhub.io", env="TIKHUB_BASE_URL")
