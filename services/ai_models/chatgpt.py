@@ -36,7 +36,7 @@ class ChatGPT:
                    user_prompt: str,
                    model: str = None,
                    temperature: float = None,
-                   max_tokens: int = None,
+                   max_tokens: int = 10000,
                    timeout: int = 60,
                    ) -> Dict[str, Any]:
         """
