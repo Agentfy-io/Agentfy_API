@@ -13,7 +13,7 @@ from fastapi.openapi.utils import get_openapi
 import uvicorn
 from dotenv import load_dotenv
 
-from app.api.routes import customer, auth
+from app.api.routes import customer, auth, sentiment
 from app.core.exceptions import CommentAPIException
 from app.utils.logger import setup_logger
 from app.dependencies import log_request_middleware
@@ -150,7 +150,7 @@ app.openapi = custom_openapi
 # 注册路由
 app.include_router(auth.router, prefix="/api/v1", tags=["认证"])
 app.include_router(customer.router, prefix="/api/v1", tags=["购买客户分析"])
-
+app.include_router(sentiment.router, prefix="/api/v1", tags=["评论舆情分析"])
 
 # 全局异常处理
 @app.exception_handler(CommentAPIException)
