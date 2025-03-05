@@ -39,7 +39,7 @@ class CustomerAgent:
 
     def __init__(self, tikhub_api_key: Optional[str] = None, tikhub_base_url: Optional[str] = None):
         """
-        初始化CommentAgent，加载API密钥和提示模板
+        初始化CustomerAgent，加载API密钥和提示模板
 
         Args:
             tikhub_api_key: TikHub API密钥
@@ -90,7 +90,153 @@ class CustomerAgent:
             - emojis indicating positive sentiment or interest
             - Positive reactions to product features
             - Any positive sentiment to the influencer herself/himself is consider neutral
-            - Any engagement indicating potential future purchase"""
+            - Any engagement indicating potential future purchase""",
+            'customer_reply': """# # Multilingual Customer Service AI Assistant
+            
+            ## System Instruction
+            
+            You are an advanced multilingual customer service AI for an e-commerce platform. Your task is to:
+            1. Analyze the store information provided by the merchant
+            2. Identify the language of both the store information and customer message
+            3. Generate a helpful, accurate response to the customer inquiry
+            4. Return your response in a structured JSON format
+            
+            ## Analysis Guidelines
+            
+            1. **Language Detection**:
+               - Automatically detect the language of the store information
+               - Automatically detect the language of the customer message
+               - Translate the customer message to the store language
+               - Determine the most appropriate language for your response (typically matching the customer's language)
+            
+            2. **Store Information Analysis**:
+               - Extract key details about products, pricing, shipping, returns, promotions, etc.
+               - Understand store policies across different languages
+               - Identify store name and branding elements
+            
+            3. **Customer Message Analysis**:
+               - Identify the customer's primary question or concern
+               - Detect any secondary questions
+               - Understand the customer's tone and respond appropriately
+            
+            ## Response Generation
+            
+            1. **Content Creation**:
+               - Provide accurate information based only on the store details provided
+               - If information is not available, acknowledge this limitation politely
+               - Structure your response with greeting, answer, additional information.
+               - Be concise and to the point, avoiding unnecessary details, usually one or two sentences is enough.
+               - Maintain a helpful, professional tone appropriate to the detected culture
+               - Also generate a translated version of your response in the shop language
+            
+            2. **Response Language**:
+               - Respond in the same language as the customer message
+               - If you cannot confidently respond in the customer's language, default to the store's language
+               - Use culturally appropriate greetings and expressions
+            
+            ## JSON Output Format
+            
+            Your response must be formatted as a valid JSON object with the following structure:
+            ```json
+            {
+              "detected_store_language": "language_code",
+              "detected_customer_language": "language_code",
+              "response_language": "language_code",
+              'translated_customer_message': 'translated message',
+              "response_text": "Your complete customer service response",
+              "response_text_translated": "Your response translated to the store language",
+              "confidence_score": 0.95
+            }
+            """,
+            'batch_customer_reply':"""## Multilingual Batch Customer Service AI Assistant
+### System Instruction
+You are an advanced multilingual customer service AI for an e-commerce platform. Your task is to process multiple customer messages simultaneously and generate appropriate responses for each.
+### Input Format
+You will receive a JSON object with the following structure:
+```json
+{
+  "shop_info": "Complete store information in any language",
+  "messages": [
+    {
+      "message_id": 0,
+      "commenter_uniqueId": "customer_unique_id_1",
+      "comment_id": "optional_comment_id_1",
+      "message_text": "Customer message 1 in any language"
+    },
+    {
+      "message_id": 1,
+      "commenter_uniqueId": "customer_unique_id_2",
+      "comment_id": "optional_comment_id_2",
+      "message_text": "Customer message 2 in any language"
+    },
+    ...
+  ]
+}
+```
+### Processing Steps
+For each customer message, perform the following:
+
+#### 1. Language Detection
+- Detect the language of the store information.
+- Detect the language of the customer message.
+- Choose the appropriate language for your response (typically the customer's language).
+
+#### 2. Message Translation
+- If the customer's language differs from the store language, translate the customer message TO THE STORE'S LANGUAGE and save it as translated_customer_message.
+- This translation helps the store owner understand what the customer is saying in the store owner's language.
+
+#### 3. Content Analysis
+- Understand the store policies, products, and services based on the `shop_info`.
+- Identify the customer's question or concern.
+- Formulate a helpful, accurate response based only on the available information.
+
+#### 4. Response Creation
+Generate a complete, professional response in the customer's language. Include:
+- **Greeting:** Friendly opening appropriate to the language/culture.
+- **Answer:** Directly address the customer's question.
+
+If necessary, translate your response into the store's language for reference.
+
+### Output Format
+Return a JSON array containing one object for each input message in the same order as received. Each object must have the following structure:
+
+```json
+[
+  {
+    "message_id": 0,
+    "detected_store_language": "language_code",
+    "detected_customer_language": "language_code",
+    'customer_unique_id': 'customer_unique_id_1',
+    "translated_customer_message": "translated message",
+    "response_text": "Your complete customer service response in customer's language",
+    "response_text_translated": "Your response translated to the store language"
+  },
+  {
+    "message_id": 1,
+    "detected_store_language": "language_code",
+    "detected_customer_language": "language_code",
+    'customer_unique_id': 'customer_unique_id_2',
+    "translated_customer_message": "translated message",
+    "response_text": "Your complete customer service response in customer's language",
+    "response_text_translated": "Your response translated to the store language"
+  }
+]
+```
+
+### Important Rules
+✅ Return **ONLY** a valid JSON array with objects matching the format above.
+✅ Use **ISO 639-1** codes for language identification (e.g., "en", "zh", "fr", "es").
+✅ Base responses **ONLY** on the provided store information.
+✅ If the provided information is insufficient to answer a question, clearly state this.
+✅ Maintain a professional and helpful tone.
+
+### Response Content Guidelines
+Each response should include:
+- **Greeting** - Friendly and culturally appropriate.
+- **Answer** - Direct and accurate, usually one or two sentences is enough.
+
+This format ensures efficient multilingual customer support while maintaining high-quality, contextually relevant responses. 🚀
+"""
         }
 
     def _load_user_prompts(self) -> None:
@@ -958,20 +1104,288 @@ class CustomerAgent:
             logger.error(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
             raise RuntimeError(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
 
+    async def generate_single_reply_message(
+            self,
+            shop_info: str,
+            customer_id: str,
+            customer_message: str,
+    ) -> Dict[str, Any]:
+        """
+        生成单条客户回复消息
 
+        Args:
+            shop_info (str): 店铺信息
+            customer_id (str): 客户uniqueID
+            customer_message (str): 客户消息
+        Returns:
+            Dict[str, Any]: 生成的回复消息
 
+        Raises:
+            ValueError: 当参数无效时
+            RuntimeError: 当分析过程中出现错误时
+        """
+        try:
+            # 参数验证
+            if not customer_message:
+                raise ValueError("customer_message不能为空")
+
+            sys_prompt = self.system_prompts['customer_reply']
+            user_prompt = f"Here is the shop information:\n{shop_info}\n\nHere is the customer message:\n{customer_message},\n\nPlease generate a reply message for the customer."
+
+            # 生成回复消息
+            reply_message = await self.chatgpt.chat(
+                system_prompt=sys_prompt,
+                user_prompt=user_prompt,
+                temperature=0.7,
+            )
+
+            # 解析回复消息
+            reply_message = reply_message["choices"][0]["message"]["content"].strip()
+            # 解析json
+            reply_message = re.sub(
+                r"```json\n|\n```",
+                "",
+                reply_message.strip()
+            )  # 去除Markdown代码块
+
+            reply_message = json.loads(reply_message)
+
+            return {
+                'customer_id': customer_id,
+                'reply_message': reply_message,
+            }
+        except ValueError:
+            # 直接向上传递验证错误
+            raise ValueError
+        except RuntimeError:
+            # 直接向上传递运行时错误
+            raise RuntimeError
+        except Exception as e:
+            logger.error(f"生成单条客户回复消息时发生未预期错误: {str(e)}")
+            raise RuntimeError(f"生成单条客户回复消息时发生未预期错误: {str(e)}")
+
+    async def generate_customer_reply_messages(
+            self,
+            shop_info: str,
+            customer_messages: List[Dict[str, Any]],
+            batch_size: int = 5
+    ) -> List[Dict[str, Any]]:
+        """
+        批量生成客户回复消息
+
+        Args:
+            shop_info (str): 店铺信息
+            customer_messages (List[Dict[str, Any]]): 客户消息列表, 每个消息包括commenter_uniqueId, comment_id, text
+            batch_size (int, optional): 每批处理的客户消息数量. 默认为5.
+
+        Returns:
+            List[Dict[str, Any]]: 生成的回复消息列表, 每个回复包含语言检测和回复内容
+
+        Raises:
+            ValueError: 当参数无效时
+            RuntimeError: 当分析过程中出现错误时
+        """
+        try:
+            # 参数验证
+            if not shop_info:
+                raise ValueError("店铺信息不能为空")
+
+            if not customer_messages:
+                raise ValueError("客户消息列表不能为空")
+
+            # 检查消息格式
+            for msg in customer_messages:
+                if "commenter_uniqueId" not in msg or "text" not in msg:
+                    raise ValueError(f"消息格式错误, 必须包含commenter_uniqueId和text字段: {msg}")
+
+            # 准备结果列表
+            all_replies = []
+
+            # 按批次处理消息
+            for i in range(0, len(customer_messages), batch_size):
+                batch = customer_messages[i:i + batch_size]
+
+                # 构建批处理提示
+                batch_messages = []
+                for idx, msg in enumerate(batch):
+                    batch_messages.append({
+                        "message_id": idx,
+                        "commenter_uniqueId": msg.get("commenter_uniqueId"),
+                        "comment_id": msg.get("comment_id", ""),
+                        "message_text": msg.get("text")  # 注意此处key改为message_text以适配prompt
+                    })
+
+                batch_prompt = {
+                    "shop_info": shop_info,
+                    "messages": batch_messages
+                }
+
+                # 将字典转换为JSON字符串
+                batch_prompt_json = json.dumps(batch_prompt, ensure_ascii=False)
+
+                # 调用AI生成回复
+                batch_replies = await self.chatgpt.chat(
+                    system_prompt=self.system_prompts['batch_customer_reply'],
+                    user_prompt=batch_prompt_json,  # 确保这里传入的是字符串
+                    temperature=0.7
+                )
+
+                # 解析AI回复
+                batch_replies = batch_replies["choices"][0]["message"]["content"].strip()
+                # 解析JSON
+                batch_replies = re.sub(
+                    r"```json\n|\n```",
+                    "",
+                    batch_replies.strip()
+                )
+
+                # 解析回复结果
+                try:
+                    parsed_replies = json.loads(batch_replies)
+
+                    # 验证回复格式
+                    if not isinstance(parsed_replies, list):
+                        raise ValueError("AI返回的结果格式错误，应为列表")
+
+                    # 将批次回复添加到总结果中
+                    for reply in parsed_replies:
+                        # 确保uniqueID在回复中
+                        message_id = reply.get("message_id")
+                        if message_id is not None and 0 <= message_id < len(batch):
+                            reply["commenter_uniqueId"] = batch[message_id].get("commenter_uniqueId")
+                            reply["comment_id"] = batch[message_id].get("comment_id", "")
+
+                        all_replies.append(reply)
+
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"无法解析AI返回的JSON结果: {batch_replies[:200]}... (错误: {str(json_err)})")
+                    raise RuntimeError(f"AI返回的结果不是有效的JSON格式: {str(json_err)}")
+
+            return all_replies
+
+        except ValueError as e:
+            logger.warning(f"参数验证错误: {str(e)}")
+            raise
+
+        except RuntimeError as e:
+            logger.error(f"运行时错误: {str(e)}")
+            raise
+
+        except Exception as e:
+            logger.error(f"批量生成客户回复消息时发生未预期错误: {str(e)}", exc_info=True)
+            raise RuntimeError(f"批量生成客户回复消息时发生未预期错误: {str(e)}")
 
 async def main():
     # 创建CustomerAgent实例
     agent = CustomerAgent()
 
     # 示例：获取keyword潜在客户
-    keyword = "red liptick"
-    potential_customers = await agent.get_keyword_potential_customers(keyword,20, 5, 5, 0, 100.0, True, False, 'US', 100)
+    #keyword = "red liptick"
+    #potential_customers = await agent.get_keyword_potential_customers(keyword,20, 5, 5, 0, 100.0, True, False, 'US', 100)
 
     #save to json
-    with open('potential_customers.json', 'w', encoding='utf-8') as f:
-        json.dump(potential_customers, f, ensure_ascii=False, indent=4)
+    #with open('potential_customers.json', 'w', encoding='utf-8') as f:
+    #    json.dump(potential_customers, f, ensure_ascii=False, indent=4)
+
+    # 生成单条客户回复消息测试
+    shop_info = """
+    店铺名称：优雅时尚屋
+店铺简介：优雅时尚屋成立于2015年，专注于提供高品质的时尚服装和配饰。我们致力于为客户提供最新的时尚趋势和永恒的经典款式。
+
+产品信息：
+- 女士连衣裙：价格范围在￥299-￥899，材质包括棉、丝绸和混纺面料
+- 男士衬衫：价格范围在￥199-￥599，有多种款式和颜色可选
+- 时尚包包：价格范围在￥499-￥1899，有真皮和高级PU材质可选
+- 精美首饰：价格范围在￥99-￥699，包括项链、耳环和手链
+
+促销活动：
+- 新用户首单满￥500减￥50
+- 每周三会员日，全场9折
+- 季末清仓，指定商品低至5折
+
+配送政策：
+- 国内订单满￥199免运费，否则运费￥15
+- 国际配送可发往亚洲、欧洲、北美等地区，运费根据重量和目的地计算
+- 正常订单处理时间为1-2个工作日，国内配送3-5天，国际配送7-15天
+
+退换政策：
+- 收到商品后7天内可申请退换
+- 商品需保持原包装和吊牌完好
+- 定制商品和特价商品不支持退换
+
+支付方式：
+- 支持支付宝、微信支付、银联卡和主流国际信用卡
+- 国际订单支持PayPal支付
+
+联系方式：
+- 客服电话：400-888-7777（工作日9:00-18:00）
+- 客服邮箱：service@elegantfashion.com
+- 微信公众号：优雅时尚屋"""
+    #customer_id = "12345"
+    #customer_message = "Où puis-je trouver les informations sur la livraison ?"
+    #reply_lang = "zh"
+
+    #reply_message = await agent.generate_single_reply_message(shop_info, customer_id, customer_message)
+    #print(reply_message)
+
+    # 生成批量客户回复消息测试
+    customer_messages = [
+        {
+            "commenter_uniqueId": "user1",
+            "comment_id": "c1",
+            "text": "Où puis-je trouver les informations sur la livraison ?"  # 法语: 我在哪里可以找到配送信息？
+        },
+        {
+            "commenter_uniqueId": "user2",
+            "comment_id": "c2",
+            "text": "What is the return policy?"  # 英语: 退货政策是什么？
+        },
+        {
+            "commenter_uniqueId": "user3",
+            "comment_id": "c3",
+            "text": "¿Cuánto tiempo tarda en llegar mi pedido a España?"  # 西班牙语: 我的订单多久能送到西班牙？
+        },
+        {
+            "commenter_uniqueId": "user4",
+            "comment_id": "c4",
+            "text": "この商品は日本に配送できますか？送料はいくらですか？"  # 日语: 这个商品可以送到日本吗？运费是多少？
+        },
+        {
+            "commenter_uniqueId": "user5",
+            "comment_id": "c5",
+            "text": "Ich möchte wissen, ob die Größe M noch verfügbar ist?"  # 德语: 我想知道M码是否还有库存？
+        },
+        {
+            "commenter_uniqueId": "user6",
+            "comment_id": "c6",
+            "text": "Ho fatto un ordine tre giorni fa ma non ho ricevuto nessuna conferma. Potete aiutarmi?"
+            # 意大利语: 我三天前下了订单但没收到确认。您能帮我吗？
+        },
+        {
+            "commenter_uniqueId": "user7",
+            "comment_id": "c7",
+            "text": "Принимаете ли вы оплату PayPal?"  # 俄语: 你们接受PayPal付款吗？
+        },
+        {
+            "commenter_uniqueId": "user8",
+            "comment_id": "c8",
+            "text": "我想了解一下这个产品的材质是什么？是纯棉的吗？"  # 中文: 询问产品材质
+        },
+        {
+            "commenter_uniqueId": "user9",
+            "comment_id": "c9",
+            "text": "Do you offer express shipping? I need this item by next week."  # 英语: 你们提供快递吗？我需要下周收到这个物品。
+        },
+        {
+            "commenter_uniqueId": "user10",
+            "comment_id": "c10",
+            "text": "هل تشحنون إلى المملكة العربية السعودية؟ وكم تكلفة الشحن؟"  # 阿拉伯语: 你们发货到沙特阿拉伯吗？运费是多少？
+        }
+    ]
+
+    batch_reply_messages = await agent.generate_customer_reply_messages(shop_info, customer_messages, 10)
+    print(batch_reply_messages)
+
 
 
 if __name__ == "__main__":
