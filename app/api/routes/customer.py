@@ -4,7 +4,9 @@
 @desc: FastAPI 客户端路由
 @auth: Callmeiks
 """
-from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request
+import json
+
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body
 from typing import Dict, Any, List, Optional
 import time
 from datetime import datetime
@@ -40,21 +42,6 @@ router = APIRouter(prefix="/customers")
 async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
     """使用验证后的TikHub API Key创建CustomerAgent实例"""
     return CustomerAgent(tikhub_api_key=tikhub_api_key, tikhub_base_url=settings.TIKHUB_BASE_URL)
-
-
-@router.get(
-    "/health",
-    summary="健康检查",
-    description="检查API是否正常运行",
-    tags=["健康检查"]
-)
-async def health_check():
-    """简单的健康检查端点"""
-    return create_response(
-        data={"status": "healthy", "timestamp": datetime.now().isoformat()},
-        success=True
-    )
-
 
 @router.post(
     "/fetch_video_comments",
@@ -111,7 +98,7 @@ async def fetch_video_comments(
 
 @router.post(
     "/fetch_purchase_intent_stats",
-    summary="分析指定视频购买意图",
+    summary="分析指定视频购买意图统计数据",
     description="""
 用途:
    * 分析TikTok视频评论中的购买意图，计算购买意图比率及各兴趣水平的购买意图数量
@@ -127,7 +114,7 @@ async def fetch_video_comments(
 async def analyze_purchase_intent(
         request: Request,
         aweme_id: str = Query(..., description="TikTok视频ID"),
-        batch_size : int = Query(30, description="每批处理的评论数量"),
+        batch_size: int = Query(30, description="每批处理的评论数量"),
         concurency: int = Query(5, description="ai处理并发数"),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
@@ -347,4 +334,156 @@ async def identify_keyword_potential_customers(
 
     except Exception as e:
         logger.error(f"识别关键词潜在客户时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+
+@router.post(
+    "/generate_single_reply",
+    summary="生成单条客户回复消息",
+    description="""
+用途:
+   * 根据店铺信息为单个客户消息生成回复
+参数:
+   * shop_info: 店铺信息
+   * customer_id: 客户uniqueID
+   * customer_message: 客户消息
+返回:
+   * 生成的回复消息
+""",
+    response_model_exclude_none=True,
+)
+async def generate_single_reply(
+        request: Request,
+        shop_info: str = Query(..., description="店铺信息"),
+        customer_id: str = Query(..., description="客户uniqueID"),
+        customer_message: str = Query(..., description="客户消息"),
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    生成单条客户回复消息
+
+    - **shop_info**: 店铺信息
+    - **customer_id**: 客户uniqueID
+    - **customer_message**: 客户消息
+
+    返回生成的客户回复消息
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"为客户 '{customer_id}' 生成回复消息")
+
+        result = await customer_agent.generate_single_reply_message(
+            shop_info=shop_info,
+            customer_id=customer_id,
+            customer_message=customer_message
+        )
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=result,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ValueError as e:
+        logger.error(f"参数错误: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except RuntimeError as e:
+        logger.error(f"运行时错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"生成客户回复消息时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+
+@router.post(
+    "/generate_batch_replies",
+    summary="批量生成客户回复消息",
+    description="""
+用途:
+   * 根据店铺信息为多个客户消息批量生成回复
+参数:
+   * shop_info: 店铺信息
+   * customer_messages: 客户消息列表，每个包含commenter_uniqueId, comment_id, text
+   * batch_size: 每批处理消息数量，默认5
+返回:
+   * 生成的回复消息列表
+""",
+    response_model_exclude_none=True,
+)
+async def generate_batch_replies(
+        request: Request,
+        shop_info: str = Query(..., description="店铺信息"),
+        batch_size: int = Query(5, description="每批处理消息数量"),
+        customer_messages: List[Dict[str, Any]] = Body(...,
+                                                       description="客户消息列表，每个包含commenter_uniqueId, comment_id, text",
+                                                       examples=[[{
+                                                           "commenter_uniqueId": "user1",
+                                                           "comment_id": "c1",
+                                                           "text": "Où puis-je trouver les informations sur la livraison ?"
+                                                           # 法语: 我在哪里可以找到配送信息？
+                                                       },
+                                                           {
+                                                               "commenter_uniqueId": "user2",
+                                                               "comment_id": "c2",
+                                                               "text": "What is the return policy?"  # 英语: 退货政策是什么？
+                                                           },
+                                                       ]]
+                                                       ),
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    批量生成客户回复消息
+
+    - **shop_info**: 店铺信息
+    - **customer_messages**: 客户消息列表，每个包含commenter_uniqueId, comment_id, text
+    - **batch_size**: 每批处理消息数量，默认为5
+
+    返回生成的客户回复消息列表
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"批量生成客户回复消息，共 {len(customer_messages)} 条")
+
+        # 注意：不需要调用dict()，因为customer_messages已经是字典列表
+        # 如果使用了Pydantic模型，则需要使用这行
+        # messages = [msg.dict() for msg in customer_messages]
+
+        result = await customer_agent.generate_customer_reply_messages(
+            shop_info=shop_info,
+            customer_messages=customer_messages,
+            batch_size=batch_size
+        )
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=result,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ValueError as e:
+        logger.error(f"参数错误: {str(e)}")
+        raise HTTPException(status_code=400, detail=str(e))
+
+    except RuntimeError as e:
+        logger.error(f"运行时错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+    except Exception as e:
+        logger.error(f"批量生成客户回复消息时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
