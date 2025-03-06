@@ -263,4 +263,45 @@ async def fetch_audience_info(
 """,
     response_model_exclude_none=True,
 )
+async def analyze_toxicity(
+        request: Request,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
+        batch_size: int = Query(30, description="每次处理的评论数量"),
+        concurrency: int = Query(5, description="并发请求数"),
+        sentiment_agent: SentimentAgent = Depends(get_sentiment_agent)
+):
+    """
+    获取评论区黑评/差评分析结果
+
+    - **aweme_id**: TikTok视频ID
+
+    返回黑评/差评分析结果列表
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"获取评论区黑评/差评分析结果")
+
+        toxicity_data = await sentiment_agent.analyze_toxicity(aweme_id, batch_size, concurrency)
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=toxicity_data,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"获取评论区黑评/差评分析结果时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
