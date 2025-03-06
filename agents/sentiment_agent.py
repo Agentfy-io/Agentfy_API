@@ -58,6 +58,8 @@ class SentimentAgent:
         if not self.tikhub_api_key:
             logger.warning("未提供TikHub API密钥，某些功能可能不可用")
 
+        self.analysis_types = ['sentiment', 'relationship', 'toxicity']
+
         # 加载系统和用户提示
         self._load_system_prompts()
         self._load_user_prompts()
@@ -95,8 +97,7 @@ class SentimentAgent:
                 
                 Respond with a JSON array containing analysis for all comments.
                 """,
-
-            "relationship": """You are an AI trained to analyze audience sentiment and engagement toward an influencer or creator. Your task is to assess how commenters perceive and interact with the influencer.
+            'relationship': """You are an AI trained to analyze audience sentiment and engagement toward an influencer or creator. Your task is to assess how commenters perceive and interact with the influencer.
                 For each comment, analyze:
                 1. **Trust Level:** (loyal fan, skeptical, indifferent)
                 2. **Tone Toward Influencer/Brand:** (supportive, critical, neutral)
@@ -433,7 +434,7 @@ class SentimentAgent:
             logger.error(f"分析评论方面时发生未预期错误: {str(e)}")
             raise InternalServerError(f"分析评论方面时发生未预期错误: {str(e)}")
 
-    async def analyze_sentiment(self, aweme_id: str, batch_size:int=30,concurrency: int=5) -> Dict[str, Any]:
+    async def analyze_sentiment(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[str, Any]:
         """
         分析指定视频的评论情感
 
@@ -633,6 +634,7 @@ class SentimentAgent:
             ExternalAPIError: 当网络连接失败时
             InternalServerError: 当分析过程中出现错误时
         """
+        start_time = time.time()
         try:
             if not aweme_id:
                 raise ValidationError(detail="aweme_id不能为空", field="aweme_id")
@@ -666,13 +668,13 @@ class SentimentAgent:
                 'trust_analysis': self.analyze_trust_metrics(analyzed_df),
                 'tone_analysis': self.analyze_audience_tone(analyzed_df),
                 'fandom_analysis': self.analyze_fandom_composition(analyzed_df),
-                'engagement_analysis': self.analyze_engagement_patterns(analyzed_df),
                 'segment_analysis': self.analyze_audience_segments(analyzed_df),
                 'meta': {
                     'total_comments': len(analyzed_df),
-                    'video_id': aweme_id,
+                    'aweme_id': aweme_id,
                     'analysis_type': 'relationship',
                     'analysis_timestamp': datetime.now().isoformat(),
+                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
             }
 
@@ -787,43 +789,6 @@ class SentimentAgent:
             }
         }
 
-    def analyze_engagement_patterns_v2(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """分析互动模式"""
-        engagement_counts = df['engagement_type'].value_counts()
-
-        # 互动与粉丝级别的关系
-        engagement_by_fandom = pd.crosstab(
-            df['engagement_type'],
-            df['fandom_level']
-        )
-
-        # 计算深度互动率
-        deep_engagement = len(df[df['engagement_type'].isin(['praise', 'criticism', 'curiosity'])]) / len(df)
-
-        return {
-            'engagement_distribution': {
-                e_type: {
-                    'count': int(count),
-                    'percentage': round(count / len(df) * 100, 2)
-                }
-                for e_type, count in engagement_counts.items()
-            },
-            'engagement_by_fandom': {
-                e_type: {
-                    fandom: int(count)
-                    for fandom, count in row.items()
-                }
-                for e_type, row in engagement_by_fandom.iterrows()
-            },
-            'engagement_metrics': {
-                'deep_engagement_rate': round(deep_engagement * 100, 2),
-                'positive_engagement_ratio': round(
-                    len(df[df['engagement_type'] == 'praise']) / len(df) * 100, 2),
-                'curiosity_ratio': round(len(df[df['engagement_type'] == 'curiosity']) / len(df) * 100,
-                                         2)
-            }
-        }
-
     def analyze_audience_segments(self, df: pd.DataFrame) -> Dict[str, Any]:
         """分析受众细分"""
         # 创建复合特征
@@ -855,13 +820,13 @@ class SentimentAgent:
         else:
             return 'regular_audience'
 
-    def _analyze_segment_characteristics(self,df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
+    def _analyze_segment_characteristics(self, df: pd.DataFrame) -> Dict[str, Dict[str, Any]]:
         """分析各细分受众的特征"""
         segments = df['audience_segment'].unique()
         characteristics = {}
 
         for segment in segments:
-            segment_df =df[df['audience_segment'] == segment]
+            segment_df = df[df['audience_segment'] == segment]
             characteristics[segment] = {
                 'trust_level': segment_df['trust_level'].mode()[0],
                 'typical_engagement': segment_df['engagement_type'].mode()[0],
@@ -884,6 +849,133 @@ class SentimentAgent:
 
         return engagement_patterns
 
+    async def fetch_audience_info(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[
+        str, Any]:
+        """
+        获取指定视频评论区的各类粉丝类型数据
+
+        Args:
+            aweme_id (str): 视频ID
+            batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): 并发处理的批次数量，默认5
+
+        Returns:
+            Dict[str, Any]: 评论区loyal_fan的粉丝信息
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+        """
+        start_time = time.time()
+
+        try:
+            if not aweme_id or not isinstance(aweme_id, str):
+                raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
+
+            # 记录开始获取评论区粉丝类型
+            logger.info(f"开始获取视频 {aweme_id} 的评论区粉丝类型")
+
+            # 获取评论
+            comment_collector = CommentCollector(self.tikhub_api_key, self.tikhub_base_url)
+            comments = await comment_collector.collect_video_comments(aweme_id)
+
+            if not comments or not comments.get('comments'):
+                logger.warning(f"视频 {aweme_id} 未找到评论")
+                return {
+                    'aweme_id': aweme_id,
+                    'comments': [],
+                    'comment_count': 0,
+                    'timestamp': datetime.now().isoformat()
+                }
+
+            # 获取清理后的评论数据
+            comments_data = await self.fetch_video_comments(aweme_id)
+
+            if not comments_data.get('comments'):
+                logger.warning(f"视频 {aweme_id} 没有评论数据")
+                return {
+                    'aweme_id': aweme_id,
+                    'error': 'No comments found',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                }
+
+            comments_df = pd.DataFrame(comments_data['comments'])
+
+            logger.info(f"开始分析视频 {aweme_id} 的评论关系")
+            analyzed_df = await self.analyze_comments_batch(comments_df, 'relationship', batch_size, concurrency)
+
+            if analyzed_df.empty:
+                raise InternalServerError("未获得有效的关系分析结果")
+
+            analysis_summary = {
+                'loyal_fans_info': self.fetch_loyal_fans_info(analyzed_df),
+                'superfans_info': self.fetch_superfans_info(analyzed_df),
+                'new_followers_info': self.fetch_new_followers_info(analyzed_df),
+                'returning_audience_info': self.fetch_returning_audience_info(analyzed_df),
+                'long_time_fans_info': self.fetch_long_time_fans_info(analyzed_df),
+                'meta': {
+                    'total_comments': len(analyzed_df),
+                    'aweme_id': aweme_id,
+                    'analysis_type': 'relationship',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                }
+
+            }
+
+            return analysis_summary
+
+        except (ValidationError, ExternalAPIError) as e:
+            # 直接向上传递这些已处理的错误
+            logger.error(f"获取视频评论区粉丝类型时出错: {str(e)}")
+            raise
+
+        except Exception as e:
+            logger.error(f"获取视频评论区粉丝类型时发生未预期错误: {str(e)}")
+            raise InternalServerError(detail=f"获取视频评论区粉丝类型时发生未预期错误: {str(e)}")
+
+    def extract_fan_group(self, df: pd.DataFrame, filter_column: str, filter_value: str, group_name: str) -> Dict[
+        str, Any]:
+        """
+        提取特定类型的粉丝群体信息
+
+        Args:
+            df (pd.DataFrame): 包含粉丝数据的DataFrame
+            filter_column (str): 用于筛选的列名
+            filter_value (str): 筛选条件的值
+            group_name (str): 粉丝群体的名称
+
+        Returns:
+            Dict[str, Any]: 包含粉丝总数和粉丝详情的字典
+        """
+        fan_group = df[df[filter_column] == filter_value]
+        columns = ['commenter_name', 'text', 'commenter_secuid', 'ins_id', 'twitter_id', 'commenter_region']
+        fan_group = fan_group[columns]
+
+        return {
+            f'total_{group_name}': len(fan_group),
+            f'{group_name}': fan_group.to_dict('records')
+        }
+
+    def fetch_loyal_fans_info(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """获取忠实粉丝信息"""
+        return self.extract_fan_group(df, 'trust_level', 'loyal_fan', 'loyal_fans')
+
+    def fetch_superfans_info(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """获取超级粉丝信息"""
+        return self.extract_fan_group(df, 'fandom_level', 'superfan', 'superfans')
+
+    def fetch_new_followers_info(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """获取新关注者信息"""
+        return self.extract_fan_group(df, 'previous_knowledge', 'new_follower', 'new_followers')
+
+    def fetch_returning_audience_info(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """获取回头观众信息"""
+        return self.extract_fan_group(df, 'previous_knowledge', 'returning_audience', 'returning_audience')
+
+    def fetch_long_time_fans_info(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """获取长期粉丝信息"""
+        return self.extract_fan_group(df, 'previous_knowledge', 'long_time_fan', 'long_time_fans')
 
 
 async def main():
