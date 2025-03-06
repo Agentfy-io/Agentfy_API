@@ -1171,6 +1171,217 @@ class SentimentAgent:
 
         return df[harmful_mask]['comment_id'].tolist()
 
+    async def fetch_toxic_commenter_by_type(self, aweme_id: str, analysis_type: str, batch_size: int = 30,
+                                            concurrency: int = 5) -> Dict[str, Any]:
+        """
+        获取指定视频的特定类型评论（负面商店评论、仇恨评论或垃圾评论）
+
+        Args:
+            aweme_id (str): 视频ID
+            analysis_type (str): 分析类型 ('negative_shop', 'hate', 'scam')
+
+        Returns:
+            Dict[str, Any]: 包含分析结果的数据
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当分析过程中出现错误时
+        """
+        start_time = time.time()
+
+        try:
+            if not aweme_id:
+                raise ValidationError(detail="aweme_id不能为空", field="aweme_id")
+
+            # 获取清理后的评论数据
+            comments_data = await self.fetch_video_comments(aweme_id)
+
+            if not comments_data.get('comments'):
+                logger.warning(f"视频 {aweme_id} 没有评论数据")
+                return {
+                    'aweme_id': aweme_id,
+                    'error': 'No comments found',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                }
+
+            comments_df = pd.DataFrame(comments_data['comments'])
+
+            logger.info(f"开始分析视频 {aweme_id} 的评论毒性")
+            analyzed_df = await self.analyze_comments_batch(comments_df, 'toxicity', batch_size, concurrency)
+
+            if analyzed_df.empty:
+                raise InternalServerError("未获得有效的毒性分析结果")
+
+            # 根据分析类型选择相应的处理方法
+            analysis_functions = {
+                'negative_shop': self._get_negative_shop_reviews,
+                'hate': self._get_hate_comments,
+                'spam': self._get_scam_comments
+            }
+
+            logger.info(f"开始分析视频 {aweme_id} 的{analysis_type}评论")
+
+            if analysis_type not in analysis_functions:
+                raise ValidationError(detail=f"不支持的分析类型: {analysis_type}", field="analysis_type")
+
+            result = analysis_functions[analysis_type](analyzed_df)
+
+            return result
+
+        except (ValidationError, ExternalAPIError, InternalServerError) as e:
+            # 直接向上传递这些已处理的错误
+            logger.error(f"获取视频{analysis_type}评论时出错: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"获取视频{analysis_type}评论时发生未预期错误: {str(e)}")
+            raise InternalServerError(detail=f"获取视频{analysis_type}评论时发生未预期错误: {str(e)}")
+
+    async def fetch_negative_shop_reviews(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[
+        str, Any]:
+        """
+        获取指定视频的负面商店评论
+
+        Args:
+            aweme_id (str): 视频ID
+            batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): 并发处理的批次数量，默认5
+
+        Returns:
+            Dict[str, Any]: 包含负面商店评论的数据
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当分析过程中出现错误时
+        """
+        return await self.fetch_toxic_commenter_by_type(aweme_id, 'negative_shop', batch_size, concurrency)
+
+    async def fetch_hate_speech(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[str, Any]:
+        """
+        获取指定视频的仇恨和攻击性评论
+
+        Args:
+            aweme_id (str): 视频ID
+            batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): 并发处理的批次数量，默认5
+
+        Returns:
+            Dict[str, Any]: 包含仇恨和攻击性评论的数据
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当分析过程中出现错误时
+        """
+        return await self.fetch_toxic_commenter_by_type(aweme_id, 'hate', batch_size, concurrency)
+
+    async def fetch_spam_content(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[str, Any]:
+        """
+        获取指定视频的垃圾和欺诈性评论
+
+        Args:
+            aweme_id (str): 视频ID
+            batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): 并发处理的批次数量，默认5
+
+        Returns:
+            Dict[str, Any]: 包含垃圾和欺诈性评论的数据
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当分析过程中出现错误时
+        """
+        return await self.fetch_toxic_commenter_by_type(aweme_id, 'spam', batch_size, concurrency)
+
+    def _extract_comment_group(self, df: pd.DataFrame, toxicity_type: str, group_name: str) -> Dict[str, Any]:
+        """
+        提取特定毒性类型的评论组
+
+        Args:
+            df (pd.DataFrame): 包含评论数据的DataFrame
+            toxicity_type (str): 要筛选的毒性类型
+            group_name (str): 评论组的名称
+
+        Returns:
+            Dict[str, Any]: 包含评论总数和评论详情的字典
+        """
+        filtered_df = df[df['toxicity_type'] == toxicity_type]
+        columns = ['commenter_name', 'text', 'commenter_secuid', 'ins_id', 'twitter_id', 'commenter_region']
+
+        return {
+            f"total_{group_name}_comments": len(filtered_df),
+            f"{group_name}_comments": filtered_df[columns]
+        }
+
+    def _get_negative_shop_reviews(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        获取负面商店评论
+
+        Args:
+            df (pd.DataFrame): 包含评论数据的DataFrame
+
+        Returns:
+            Dict[str, Any]: 包含各类型负面商店评论的数据
+        """
+        review_types = {
+            'negative_product_review': 'product',
+            'negative_shop_review': 'shop',
+            'negative_service_review': 'service'
+        }
+
+        result = {}
+        for toxicity_type, name in review_types.items():
+            result[f"negative_{name}_reviews"] = self._extract_comment_group(df, toxicity_type,
+                                                                             f"negative_{name}_review")
+
+        return result
+
+    def _get_hate_comments(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        获取仇恨和攻击性评论
+
+        Args:
+            df (pd.DataFrame): 包含评论数据的DataFrame
+
+        Returns:
+            Dict[str, Any]: 包含各类型仇恨评论的数据
+        """
+        comment_types = {
+            'hate_speech': 'hate',
+            'personal_attack': 'personal_attack',
+            'trolling': 'trolling'
+        }
+
+        result = {}
+        for toxicity_type, name in comment_types.items():
+            result[f"{name}_comments"] = self._extract_comment_group(df, toxicity_type, name)
+
+        return result
+
+    def _get_scam_comments(self, df: pd.DataFrame) -> Dict[str, Any]:
+        """
+        获取垃圾和欺诈性评论
+
+        Args:
+            df (pd.DataFrame): 包含评论数据的DataFrame
+
+        Returns:
+            Dict[str, Any]: 包含各类型垃圾评论的数据
+        """
+        scam_types = {
+            'spam': 'spam',
+            'misinformation': 'misinformation'
+        }
+
+        result = {}
+        for toxicity_type, name in scam_types.items():
+            result[f"{name}_comments"] = self._extract_comment_group(df, toxicity_type, name)
+
+        return result
+
+
 async def main():
     # 创建代理
     agent = SentimentAgent()
@@ -1180,7 +1391,6 @@ async def main():
     sentiment_analysis = await agent.analyze_sentiment(aweme_id)
     print(sentiment_analysis)
 
+
 if __name__ == "__main__":
     asyncio.run(main())
-
-
