@@ -37,7 +37,7 @@ async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
 
 @router.post(
     "/fetch_single_video_data",
-    summary="获取指定视频关键数据",
+    summary="获取/清洗 视频关键数据",
     description="""
 用途:
    * 获取TikTok视频数据，返回清洗后的app端视频数据
@@ -90,7 +90,7 @@ async def fetch_single_video_data(
 
 @router.post(
     "/analyze_video_info",
-    summary="分析视频数据",
+    summary="分析/生成 视频统计数据报告",
     description="""
 用途:
     * 分析TikTok视频数据，返回一个视频报告
@@ -116,7 +116,7 @@ async def analyze_video_info(
     start_time = time.time()
 
     try:
-        logger.info(f"分析视频数据")
+        logger.info(f"分析视频统计数据")
 
         video_report = video_agent.analyze_video_info(aweme_id)
 
@@ -142,7 +142,7 @@ async def analyze_video_info(
 
 @router.post(
     "/fetch_video_transcript",
-    summary="分析视频字幕",
+    summary="分析/转录 视频音频",
     description="""
 用途:
     * 分析TikTok视频字幕
@@ -194,7 +194,7 @@ async def fetch_video_transcript(
 
 @router.post(
     "/analyze_video_frames",
-    summary="分析视频帧",
+    summary="分析/获取 视频关键帧内容",
     description="""
 用途:
     * 分析TikTok视频帧
@@ -248,7 +248,7 @@ async def analyze_video_frames(
 
 @router.post(
     "/fetch_invideo_text",
-    summary="提取视频内文字",
+    summary="分析/提取 视频内文字",
     description="""
 用途:
     * 提取TikTok视频内文字

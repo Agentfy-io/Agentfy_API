@@ -90,7 +90,7 @@ async def fetch_video_comments(
 
 @router.post(
     "/analyze_sentiment",
-    summary="获取评论舆情分析结果",
+    summary="获取评论的情感分析统计数据",
     description="""
 用途:
     * 获取评论的情感分析结果
@@ -144,7 +144,7 @@ async def analyze_sentiment(
 
 @router.post(
     "/analyze_relationship",
-    summary="获取观众与UP主的关系分析结果",
+    summary="获取观众与UP主关系的分析统计结果",
     description="""
 用途:
     * 获取评论区观众与UP主的关系分析结果
@@ -198,10 +198,10 @@ async def analyze_relationship(
 
 @router.post(
     "/fetch_quality_audience_info",
-    summary="获取优质观众信息",
+    summary="获取优质观众信息数据",
     description="""
 用途:
-    * 获取评论区各类优质观众以及粉丝信息
+    * 获取评论区各类优质观众以及粉丝信息，包括联系方式、社交媒体账号等
 参数:
     * aweme_id: TikTok视频ID
     * batch_size: 每次处理的评论数量
@@ -256,10 +256,10 @@ async def fetch_quality_audience_info(
 
 @router.post(
     "/analyze_toxicity",
-    summary="获取评论区黑评/差评分析结果",
+    summary="获取评论区负面评论分析统计结果",
     description="""
 用途:
-    * 获取评论区黑评/差评分析结果
+    * 获取评论区负面评论分析结果，
 参数:
     * aweme_id: TikTok视频ID
 返回:
