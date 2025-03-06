@@ -15,6 +15,8 @@ logger = setup_logger(__name__)
 _customer_agent = None
 
 
+
+
 async def get_customer_agent() -> CustomerAgent:
     """
     获取CustomerAgent实例（单例模式）

@@ -11,7 +11,7 @@ logger = setup_logger(__name__)
 class VideoCleaner:
     """TikTok视频清洗器，负责处理和标准化原始视频数据"""
 
-    async def clean_app_video(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def clean_single_video(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         清洗和处理单个视频的原始数据
 
@@ -115,7 +115,10 @@ class VideoCleaner:
                 'allow_download': video_info.get('allow_download', False),
             }
 
-            return cleaned_video
+            return {
+                'aweme_id': aweme_id,
+                'video': cleaned_video,
+            }
 
         except ValidationError:
             # 直接向上传递验证错误
@@ -126,7 +129,6 @@ class VideoCleaner:
             return {
                 'aweme_id': aweme_id,
                 'error': str(e),
-                'processed': False
             }
 
     async def clean_videos_by_hashtag(self, video_data: Dict[str, Any]) -> Dict[str, Any]:

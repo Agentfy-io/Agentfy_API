@@ -268,14 +268,14 @@ This format ensures efficient multilingual customer support while maintaining hi
                 raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
             # 记录开始获取评论
-            logger.info(f"开始获取视频 {aweme_id} 的评论")
+            logger.info(f"🔍 开始获取视频 {aweme_id} 的评论")
 
             # 获取评论
             comment_collector = CommentCollector(self.tikhub_api_key, self.tikhub_base_url)
             comments = await comment_collector.collect_video_comments(aweme_id)
 
             if not comments or not comments.get('comments'):
-                logger.warning(f"视频 {aweme_id} 未找到评论")
+                logger.warning(f"❌ 视频 {aweme_id} 未找到评论")
                 return {
                     'aweme_id': aweme_id,
                     'comments': [],
