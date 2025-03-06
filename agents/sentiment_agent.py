@@ -125,6 +125,35 @@ class SentimentAgent:
                 - Assess engagement depth (quick reaction vs. detailed discussion).
                 
                 Respond with a JSON array containing the analysis for all comments.
+                """,
+            'toxicity': """You are an AI trained to analyze social media comments for harmful, inappropriate,negative_product_review, negative_service_review, negative_shop_review or spam content. Your task is to detect and categorize toxicity levels in the provided comments.
+                For each comment, analyze:
+                1. **Toxicity Level:** (low, medium, high)
+                2. **Type of Toxicity:** (e.g., negative_product_review, negative_service_review, negative_shop_review, hate speech, personal attack, trolling, misinformation, spam)
+                3. **Report Worthiness:** (should report, needs review, not harmful)
+                4. **Potential Community Guidelines Violation:** (yes/no)
+                5. **Severity Score:** (scale from 1-10, with 10 being highly toxic)
+        
+                **JSON Output Format:**
+                [
+                    {
+                        "comment_id": "comment ID from input data",
+                        "text": "comment text",
+                        "toxicity_level": "low/medium/high",
+                        "toxicity_type": "negative_product_review/negative_service_review/negative_shop_review/hate_speech/personal_attack/trolling/misinformation/spam",
+                        "report_worthiness": "should_report/needs_review/not_harmful",
+                        "community_guidelines_violation": true/false,
+                        "severity_score": "1-10",
+                    }
+                ]
+        
+                **Guidelines:**
+                - Detect offensive language, threats, or harmful intent.
+                - Recognize subtle toxicity, sarcasm, and coded language.
+                - Mark spam comments with excessive emojis, engagement-bait phrases, or promotional links.
+                - Ensure fairness by considering context and common internet slang.
+        
+                Respond with a JSON array containing the analysis for all comments.
                 """
         }
 
@@ -136,6 +165,9 @@ class SentimentAgent:
             },
             'relationship': {
                 'description': "relationship and engagement analysis",
+            },
+            'toxicity': {
+                'description': "toxicity, spam analysis",
             }
         }
 
@@ -977,6 +1009,167 @@ class SentimentAgent:
         """获取长期粉丝信息"""
         return self.extract_fan_group(df, 'previous_knowledge', 'long_time_fan', 'long_time_fans')
 
+    async def analyze_toxicity(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[str, Any]:
+        """
+        分析指定视频的评论毒性/有害性/违规性
+
+        Args:
+            aweme_id (str): 视频ID
+            batch_size (int, optional): 每批处理的评论数量，默认30
+            concurrency (int, optional): 并发处理的批次数量，默认5
+
+        Returns:
+            Dict[str, Any]: 毒性分析结果
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当分析过程中出现错误时
+        """
+        start_time = time.time()
+
+        try:
+            if not aweme_id:
+                raise ValidationError(detail="aweme_id不能为空", field="aweme_id")
+
+            if batch_size <= 0 or batch_size > settings.MAX_BATCH_SIZE:
+                raise ValidationError(
+                    detail=f"batch_size必须在1和{settings.MAX_BATCH_SIZE}之间",
+                    field="batch_size"
+                )
+
+            # 获取清理后的评论数据
+            comments_data = await self.fetch_video_comments(aweme_id)
+
+            if not comments_data.get('comments'):
+                logger.warning(f"视频 {aweme_id} 没有评论数据")
+                return {
+                    'aweme_id': aweme_id,
+                    'error': 'No comments found',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                }
+
+            comments_df = pd.DataFrame(comments_data['comments'])
+
+            logger.info(f"开始分析视频 {aweme_id} 的评论毒性")
+            analyzed_df = await self.analyze_comments_batch(comments_df, 'toxicity', batch_size, concurrency)
+
+            if analyzed_df.empty:
+                raise InternalServerError("未获得有效的毒性分析结果")
+
+            harmful_comments = self._track_harmful_comments(analyzed_df)
+
+            analysis_summary = {
+                'overview': self._analyze_toxicity_overview(harmful_comments, analyzed_df),
+                'types': self._analyze_toxicity_types(analyzed_df),
+                'severity': self._analyze_severity_levels(analyzed_df),
+                'violations': self._analyze_guideline_violations(analyzed_df),
+                'extreme_harmful_comments': harmful_comments,
+                'meta': {
+                    'total_analyzed_comments': len(analyzed_df),
+                    'aweme_id': aweme_id,
+                    'analysis_type': 'toxicity',
+                    'analysis_timestamp': datetime.now().isoformat(),
+                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                }
+            }
+
+            return analysis_summary
+        except (ValidationError, ExternalAPIError, InternalServerError) as e:
+            # 直接向上传递这些已处理的错误
+            logger.error(f"分析视频评论毒性时出错: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"分析视频评论毒性时发生未预期错误: {str(e)}")
+            raise InternalServerError(detail=f"分析视频评论毒性时发生未预期错误: {str(e)}")
+
+    def _track_harmful_comments(self,df: pd.DataFrame):
+        """Track comments that need attention"""
+        harmful_mask = (
+                (df['toxicity_level'] == 'high') |
+                (df['report_worthiness'] == 'should_report') |
+                ((df['severity_score'] >= 7) & (df['community_guidelines_violation'] == True))
+        )
+
+        harmful_comments = df[harmful_mask]
+
+        harmful_comments = [
+            {
+                'comment_id': row['comment_id'],
+                'text': row['text'],
+                'toxicity_type': row['toxicity_type'],
+                'severity_score': row['severity_score'],
+                'needs_action': row['report_worthiness'] == 'should_report'
+            }
+            for _, row in harmful_comments.iterrows()
+        ]
+        return harmful_comments
+
+    def _analyze_toxicity_overview(self,harmful_comments, df: pd.DataFrame) -> Dict[str, Any]:
+        """Generate overview of toxicity levels"""
+        total = len(df)
+
+        return {
+            'toxicity_levels': {
+                level: {
+                    'count': int(count),
+                    'percentage': round((count / total) * 100, 2)
+                }
+                for level, count in df['toxicity_level'].value_counts().items()
+            },
+            'total_harmful_comments': len(harmful_comments),
+            'requires_moderation': len(df[df['report_worthiness'] == 'should_report']),
+            'guidelines_violations': int(df['community_guidelines_violation'].sum())
+        }
+
+    def _analyze_toxicity_types(self,df: pd.DataFrame) -> Dict[str, Any]:
+        """Analyze different types of toxic content"""
+        type_counts = df['toxicity_type'].value_counts()
+
+        return {
+            'distribution': {
+                ttype: int(count)
+                for ttype, count in type_counts.items()
+            },
+            'most_common_type': type_counts.index[0],
+            'hate_speech_count': int(type_counts.get('hate_speech', 0)),
+            'harassment_count': int(type_counts.get('harassment', 0))
+        }
+
+    def _analyze_severity_levels(self,df: pd.DataFrame) -> Dict[str, Any]:
+        """Analyze severity scores of toxic content"""
+        severity_scores = df['severity_score']
+
+        return {
+            'average_severity': round(float(severity_scores.mean()), 2),
+            'high_severity_count': int(len(df[df['severity_score'] >= 7])),
+            'severity_distribution': {
+                'low': int(len(severity_scores[severity_scores <= 3])),
+                'medium': int(len(severity_scores[(severity_scores > 3) & (severity_scores < 7)])),
+                'high': int(len(severity_scores[severity_scores >= 7]))
+            }
+        }
+
+    def _analyze_guideline_violations(self,df: pd.DataFrame) -> Dict[str, Any]:
+        """Analyze community guidelines violations"""
+        violations = df[df['community_guidelines_violation'] == True]
+
+        return {
+            'total_violations': len(violations),
+            'violation_rate': round(len(violations) / len(df) * 100, 2),
+            'violations_by_type': violations['toxicity_type'].value_counts().to_dict()
+        }
+
+    def get_harmful_users(self,df: pd.DataFrame) -> List[str]:
+        """Get list of comment IDs with harmful content"""
+        harmful_mask = (
+                (df['toxicity_level'] == 'high') |
+                (df['report_worthiness'] == 'should_report') |
+                ((df['severity_score'] >= 7) &
+                 (df['community_guidelines_violation'] == True))
+        )
+
+        return df[harmful_mask]['comment_id'].tolist()
 
 async def main():
     # 创建代理
