@@ -835,7 +835,7 @@ This format ensures efficient multilingual customer support while maintaining hi
                     #    continue
 
                     potential_customers.append({
-                        'user_uniqueID': user_id,
+                        'user_uniqueId': user_id,
                         'potential_value': potential_value,
                         'user_secuid': sec_uid,
                         'ins_id': row.get('ins_id', ''),
