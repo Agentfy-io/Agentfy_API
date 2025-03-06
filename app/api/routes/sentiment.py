@@ -304,4 +304,174 @@ async def analyze_toxicity(
         logger.error(f"获取评论区黑评/差评分析结果时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
+@router.post(
+    "/fetch_negative_shop_reviews",
+    summary="获取商品差评用户信息",
+    description="""
+用途:
+    * 获取评论区商品差评的评论者信息
+参数:
+    * aweme_id: TikTok视频ID
+返回:
+    * 差评评论者信息列表（包括评论ID、评论内容、评论者用户名、评论者安全用户ID(SecUid)）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_negative_shop_reviews(
+        request: Request,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
+        batch_size: int = Query(30, description="每次处理的评论数量"),
+        concurrency: int = Query(5, description="并发请求数"),
+        sentiment_agent: SentimentAgent = Depends(get_sentiment_agent)
+):
+    """
+    获取评论区商品差评的评论者信息
+
+    - **aweme_id**: TikTok视频ID
+    - **batch_size**: 每次处理的评论数量
+    - **concurrency**: 并发请求数
+
+    返回差评评论者信息列表
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"获取评论区商品差评的评论者信息")
+
+        negative_reviews_data = await sentiment_agent.fetch_negative_shop_reviews(aweme_id, batch_size, concurrency)
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=negative_reviews_data,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"获取评论区商品差评的评论者信息时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+@router.post(
+    "/fetch_hate_speech",
+    summary="获取评论区恶意言论用户信息",
+    description="""
+用途:
+    * 获取评论区恶意言论的评论者信息
+参数:
+    * aweme_id: TikTok视频ID
+    * batch_size: 每次处理的评论数量
+    * concurrency: 并发请求数
+返回:
+    * 恶意评论者信息列表（包括评论ID、评论内容、评论者用户名、评论者安全用户ID(SecUid)）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_hate_speech(
+        request: Request,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
+        batch_size: int = Query(30, description="每次处理的评论数量"),
+        concurrency: int = Query(5, description="并发请求数"),
+        sentiment_agent: SentimentAgent = Depends(get_sentiment_agent)
+):
+    """
+    获取评论区恶意评论者信息
+
+    - **aweme_id**: TikTok视频ID
+    - **batch_size**: 每次处理的评论数量
+    - **concurrency**: 并发请求数
+
+    返回恶意评论者信息列表
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"获取评论区恶意评论者信息")
+
+        hate_comments_data = await sentiment_agent.fetch_hate_speech(aweme_id, batch_size, concurrency)
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=hate_comments_data,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"获取评论区恶意评论者信息时发生未预期错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+
+@router.post(
+    "/fetch_spam_content",
+    summary="获取评论区垃圾言论用户信息",
+    description="""
+用途:
+    * 获取评论区垃圾言论的评论者信息
+参数:
+    * aweme_id: TikTok视频ID
+    * batch_size: 每次处理的评论数量
+    * concurrency: 并发请求数
+返回:
+    * 垃圾评论者信息列表（包括评论ID、评论内容、评论者用户名、评论者安全用户ID(SecUid)）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_spam_content(
+        request: Request,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
+        batch_size: int = Query(30, description="每次处理的评论数量"),
+        concurrency: int = Query(5, description="并发请求数"),
+        sentiment_agent: SentimentAgent = Depends(get_sentiment_agent)
+):
+    """
+    获取评论区垃圾评论者信息
+
+    - **aweme_id**: TikTok视频ID
+    - **batch_size**: 每次处理的评论数量
+    - **concurrency**: 并发请求数
+
+    返回垃圾评论者信息列表
+    """
+    start_time = time.time()
+
+    try:
+        logger.info(f"获取评论区垃圾评论者信息")
+
+        spam_comments_data = await sentiment_agent.fetch_spam_content(aweme_id, batch_size, concurrency)
+
+        processing_time = time.time() - start_time
+
+        return create_response(
+            data=spam_comments_data,
+            success=True,
+            processing_time_ms=round(processing_time * 1000, 2)
+        )
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {e.detail}")
+        raise HTTPException(status_code=e.status_code, detail=e.detail)
+
+    except Exception as e:
+        logger.error(f"获取评论区垃圾评论者信息时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
