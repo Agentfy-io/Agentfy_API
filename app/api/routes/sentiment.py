@@ -197,19 +197,21 @@ async def analyze_relationship(
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
 @router.post(
-    "/fetch_audience_info",
-    summary="获取观众粉丝信息",
+    "/fetch_quality_audience_info",
+    summary="获取优质观众信息",
     description="""
 用途:
-    * 获取评论区各类观众粉丝信息
+    * 获取评论区各类优质观众以及粉丝信息
 参数:
     * aweme_id: TikTok视频ID
+    * batch_size: 每次处理的评论数量
+    * concurrency: 并发请求数
 返回:
     * 观众粉丝信息列表（包括评论ID、评论内容、评论者用户名、评论者安全用户ID(SecUid)、粉丝信息）
 """,
     response_model_exclude_none=True,
 )
-async def fetch_audience_info(
+async def fetch_quality_audience_info(
         request: Request,
         aweme_id: str = Query(..., description="TikTok视频ID"),
         batch_size: int = Query(30, description="每次处理的评论数量"),
@@ -217,9 +219,11 @@ async def fetch_audience_info(
         sentiment_agent: SentimentAgent = Depends(get_sentiment_agent)
 ):
     """
-    获取评论区各类粉丝信息
+    获取评论区各类优质观众粉丝信息
 
     - **aweme_id**: TikTok视频ID
+    - **batch_size**: 每次处理的评论数量
+    - **concurrency**: 并发请求数
 
     返回粉丝信息列表
     """
@@ -228,7 +232,7 @@ async def fetch_audience_info(
     try:
         logger.info(f"获取评论区各类粉丝信息")
 
-        audience_data = await sentiment_agent.fetch_audience_info(aweme_id, batch_size, concurrency)
+        audience_data = await sentiment_agent.fetch_quality_audience_info(aweme_id, batch_size, concurrency)
 
         processing_time = time.time() - start_time
 
@@ -423,7 +427,7 @@ async def fetch_hate_speech(
     summary="获取评论区垃圾言论用户信息",
     description="""
 用途:
-    * 获取评论区垃圾言论的评论者信息
+    * 分析评论区垃圾言论的评论者信息
 参数:
     * aweme_id: TikTok视频ID
     * batch_size: 每次处理的评论数量
