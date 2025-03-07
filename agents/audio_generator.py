@@ -21,8 +21,10 @@ from app.utils.logger import setup_logger
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from services.ai_models.whisper import WhisperLemonFox
+from services.ai_models.genny import Genny
 from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
+from services.auth.auth_service import user_sessions
 
 # 设置日志记录器
 logger = setup_logger(__name__)
@@ -48,6 +50,7 @@ class AudioGeneratorAgent:
         self.chatgpt = ChatGPT()
         self.claude = Claude()
         self.whisper = WhisperLemonFox()
+        self.genny = Genny()
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
@@ -64,217 +67,208 @@ class AudioGeneratorAgent:
     def _load_system_prompts(self) -> None:
         """加载系统提示用于不同的评论分析类型"""
         self.system_prompts = {
-            'purchase_intent': """You are an AI trained to analyze social media comments about products.
-            For each comment in the provided list, analyze:
-            1. Sentiment (positive, negative, or neutral)
-            2. Purchase Intent (whether the user shows any interest in buying, trying, or acquiring the product)
-            3. User Interest Level (high, medium, low)
+            "text_to_script": """You are a professional short-video script creation assistant. When given a brief request from the user (e.g., "Create a short story about Nezha"), you should automatically infer and decide on the following five elements:           
+            1. language:
+               - The language to be used in the script. 
+               - Must be returned using an ISO language-region format (e.g., "zh-CN", "en-US"). 
+               - If the user does not specify a language, you should automatically match the user's input or default to an appropriate language.           
+            2. context:
+               - The general context or theme (Mythology & Folklore, Historical Events & Biographies, Science & Technology, Educational/Academic, Art & Literature, Culture & Heritage, Travel & Exploration, Food & Culinary, Product Promotion/Commercial, Lifestyle, Entertainment & Pop Culture, Inspirational & Motivational, Health & Wellness, Personal Development & Self-Help, Philosophy & Ethics, Finance & Economics, Business & Entrepreneurship, Marketing & Advertising, Environmental & Sustainability, Social Issues & Awareness, Comedy & Satire, Parenting & Family, Relationships & Dating, Case Studies/Testimonials, Professional Skills & Career, Language Learning, Hobbies & Crafts, Gaming, News & Current Events, Sports & Fitness, Music & Performing Arts, Film & TV)                  
+            3. scenarioType:
+               - The scenario type. (Storytelling,Product Showcase, Educational/Explainer,Tutorial/How-To, Promotional/Marketing, Testimonial/Review, Comedy/Entertainment, Lifestyle/Vlog, Inspirational/Motivational, Documentary-Style, News/Current Events, Case Study, Interview or Q&A, Health & Wellness, Cooking/Recipe,Fashion/Beauty, Travel/Adventure, Tech Tips/Hacks, Challenge or Game.)              
+            4. tone:
+               - The overall style or mood (friendly, serious, playful, comedic, dramatic, authoritative, casual, formal, lively, motivational, urgent, enthusiastic, calm, warm, uplifting, confident, nostalgic, encouraging, soothing, empathetic, matter-of-fact, neutral, romantic, humorous). 
+               - If the user does not specify, default to a neutral/friendly tone.           
+            5. duration:
+               - The target reading duration for the script. If the user does not specify a duration, please aim for approximately 30 seconds of spoken content.          
+            **Your task**:
+            - When the user provides only a brief request, infer as many details as possible for these eight elements. 
+            - Create a short script suitable for platforms like TikTok or any short-video format, including an engaging opening, core content, and a concise conclusion or call-to-action. 
+            - Use textual cues to indicate pacing or tempo if needed (e.g., ellipses for dramatic pauses).
+            - Ensure the script is engaging, informative, and suitable for the specified context and language.
+            - you may pair up multiple tones with different scenarios, but make sure the tone is appropriate for the context.
+            - Return **only** the following JSON structure (with no extra text or formatting):            
 
-            For each comment, provide analysis in the following JSON format:
             {
-                "comment_id": "comment ID from input data",
-                "text": "comment text",
-                "sentiment": "positive/negative/neutral",
-                "purchase_intent": true/false,
-                "interest_level": "high/medium/low",
-            }
-
-            Respond with a JSON array containing analysis for all comments.
-            Focus on identifying any signs of interest in the product, including:
-            - Direct purchase intentions ("want to buy", "need this")
-            - Indirect interest ("where can I find this", "love this")
-            - Questions about product details
-            - emojis indicating positive sentiment or interest
-            - Positive reactions to product features
-            - Any positive sentiment to the influencer herself/himself is consider neutral
-            - Any engagement indicating potential future purchase""",
-            'customer_reply': """# # Multilingual Customer Service AI Assistant
-
-            ## System Instruction
-
-            You are an advanced multilingual customer service AI for an e-commerce platform. Your task is to:
-            1. Analyze the store information provided by the merchant
-            2. Identify the language of both the store information and customer message
-            3. Generate a helpful, accurate response to the customer inquiry
-            4. Return your response in a structured JSON format
-
-            ## Analysis Guidelines
-
-            1. **Language Detection**:
-               - Automatically detect the language of the store information
-               - Automatically detect the language of the customer message
-               - Translate the customer message to the store language
-               - Determine the most appropriate language for your response (typically matching the customer's language)
-
-            2. **Store Information Analysis**:
-               - Extract key details about products, pricing, shipping, returns, promotions, etc.
-               - Understand store policies across different languages
-               - Identify store name and branding elements
-
-            3. **Customer Message Analysis**:
-               - Identify the customer's primary question or concern
-               - Detect any secondary questions
-               - Understand the customer's tone and respond appropriately
-
-            ## Response Generation
-
-            1. **Content Creation**:
-               - Provide accurate information based only on the store details provided
-               - If information is not available, acknowledge this limitation politely
-               - Structure your response with greeting, answer, additional information.
-               - Be concise and to the point, avoiding unnecessary details, usually one or two sentences is enough.
-               - Maintain a helpful, professional tone appropriate to the detected culture
-               - Also generate a translated version of your response in the shop language
-
-            2. **Response Language**:
-               - Respond in the same language as the customer message
-               - If you cannot confidently respond in the customer's language, default to the store's language
-               - Use culturally appropriate greetings and expressions
-
-            ## JSON Output Format
-
-            Your response must be formatted as a valid JSON object with the following structure:
-            ```json
-            {
-              "detected_store_language": "language_code",
-              "detected_customer_language": "language_code",
-              "response_language": "language_code",
-              'translated_customer_message': 'translated message',
-              "response_text": "Your complete customer service response",
-              "response_text_translated": "Your response translated to the store language",
-              "confidence_score": 0.95
-            }
-            """,
-            'batch_customer_reply': """## Multilingual Batch Customer Service AI Assistant
-### System Instruction
-You are an advanced multilingual customer service AI for an e-commerce platform. Your task is to process multiple customer messages simultaneously and generate appropriate responses for each.
-### Input Format
-You will receive a JSON object with the following structure:
-```json
-{
-  "shop_info": "Complete store information in any language",
-  "messages": [
-    {
-      "message_id": 0,
-      "commenter_uniqueId": "customer_unique_id_1",
-      "comment_id": "optional_comment_id_1",
-      "message_text": "Customer message 1 in any language"
-    },
-    {
-      "message_id": 1,
-      "commenter_uniqueId": "customer_unique_id_2",
-      "comment_id": "optional_comment_id_2",
-      "message_text": "Customer message 2 in any language"
-    },
-    ...
-  ]
-}
-```
-### Processing Steps
-For each customer message, perform the following:
-
-#### 1. Language Detection
-- Detect the language of the store information.
-- Detect the language of the customer message.
-- Choose the appropriate language for your response (typically the customer's language).
-
-#### 2. Message Translation
-- If the customer's language differs from the store language, translate the customer message TO THE STORE'S LANGUAGE and save it as translated_customer_message.
-- This translation helps the store owner understand what the customer is saying in the store owner's language.
-
-#### 3. Content Analysis
-- Understand the store policies, products, and services based on the `shop_info`.
-- Identify the customer's question or concern.
-- Formulate a helpful, accurate response based only on the available information.
-
-#### 4. Response Creation
-Generate a complete, professional response in the customer's language. Include:
-- **Greeting:** Friendly opening appropriate to the language/culture.
-- **Answer:** Directly address the customer's question.
-
-If necessary, translate your response into the store's language for reference.
-
-### Output Format
-Return a JSON array containing one object for each input message in the same order as received. Each object must have the following structure:
-
-```json
-[
-  {
-    "message_id": 0,
-    "detected_store_language": "language_code",
-    "detected_customer_language": "language_code",
-    'customer_unique_id': 'customer_unique_id_1',
-    "translated_customer_message": "translated message",
-    "response_text": "Your complete customer service response in customer's language",
-    "response_text_translated": "Your response translated to the store language"
-  },
-  {
-    "message_id": 1,
-    "detected_store_language": "language_code",
-    "detected_customer_language": "language_code",
-    'customer_unique_id': 'customer_unique_id_2',
-    "translated_customer_message": "translated message",
-    "response_text": "Your complete customer service response in customer's language",
-    "response_text_translated": "Your response translated to the store language"
-  }
-]
-```
-
-### Important Rules
-✅ Return **ONLY** a valid JSON array with objects matching the format above.
-✅ Use **ISO 639-1** codes for language identification (e.g., "en", "zh", "fr", "es").
-✅ Base responses **ONLY** on the provided store information.
-✅ If the provided information is insufficient to answer a question, clearly state this.
-✅ Maintain a professional and helpful tone.
-
-### Response Content Guidelines
-Each response should include:
-- **Greeting** - Friendly and culturally appropriate.
-- **Answer** - Direct and accurate, usually one or two sentences is enough.
-
-This format ensures efficient multilingual customer support while maintaining high-quality, contextually relevant responses. 🚀
-"""
+                "text": "Place the final short-video (or audio) script here",
+                "metadata": {
+                    "language": "ISO language-region code (e.g. zh-CN, en-US)",
+                    "context": "e.g. mythological story",
+                    "scenarioType": "e.g. storytelling",
+                    "tone": "e.g. narrative and friendly",
+                    "duration": "e.g. 30 seconds"
+                }
+            }                        
+            **Important**:
+            - Make sure the returned field names and structure match exactly.
+            - If any user requirement is unclear or missing, assume reasonable defaults. 
+            - Always ensure the final script matches the language and context inferred or specified by the user.           
+            - Remember that this transcript will be converted to speech, so it should sound natural when read aloud. Use appropriate pacing, transitions, and conversational elements to ensure a smooth listening experience in the specified language.
+            """
         }
 
     def _load_user_prompts(self) -> None:
-        """加载用户提示用于不同的评论分析类型"""
-        self.user_prompts = {
-            'purchase_intent': {
-                'description': 'purchase intent'
-            }
-        }
+        """加载用户提示用于不同语音生成类型"""
+        pass
 
 
-    async def generate_tk_audio(self, text: str, speaker: str, speed: float = 1.0) -> Dict[str, Any]:
+    async def text_to_script(self, prompt: str, scenarioType: str, language:str ) -> dict[str, Any]:
         """
-        生成TikHub音频文件
+        根据用户输入关键词生成语音文本
+
+        Args:
+            prompt: 用户提示
+            scenarioType: 场景类型
+            language: 语言
+
+        Returns:
+            转换后的文本
+        """
+        start_time = time.time()
+
+        try:
+            if not prompt or not scenarioType or not language:
+                raise ValidationError("缺少必要参数")
+            logger.info(f"开始生成语音文本")
+            # 生成文本
+            sys_prompt = self.system_prompts.get("text_to_script")
+            user_prompt = f"Here is the request from the user: {prompt}\n\n, the scenario type is {scenarioType}, the language is {language}"
+            response = await self.chatgpt.chat(
+                system_prompt=sys_prompt,
+                user_prompt=user_prompt
+            )
+
+            # 解析ChatGPT返回的结果
+            transcript = response["choices"][0]["message"]["content"].strip()
+
+            logger.info(f"生成语音文本成功，耗时: {time.time() - start_time:.2f}秒")
+            return {
+                "transcript": transcript,
+                "metadata": {
+                    "language": "zh-CN",
+                    "context": "storytelling",
+                    "speed": "medium",
+                    'generated_at': datetime.now().isoformat(),
+                    'processing_time': time.time() - start_time
+                }
+            }
+        except ValidationError:
+            # 直接向上传递验证错误
+            raise
+        except ExternalAPIError:
+            # 直接向上传递API错误
+            raise
+        except Exception as e:
+            logger.error(f"分析评论方面时发生未预期错误: {str(e)}")
+            raise InternalServerError(f"分析评论方面时发生未预期错误: {str(e)}")
+
+    async def script_to_audio(self, text: str, language: str, gender: str, age: str, speed: int = 1) -> Dict[str, Any]:
+        """
+        根据自定义text生成Tiktok音频
 
         Args:
             text: 待转换的文本
-            speaker: 说话者ID
+            language: 语言
+            gender: 性别
+            age: 年龄
             speed: 语速
 
         Returns:
             生成的音频文件信息
         """
-        # 构建请求参数
-        payload = {
-            "speed": speed,
-            "text": text,
-            "speaker": speaker
-        }
-        headers = {
-            "accept": "application/json",
-            "content-type": "application/json",
-            "X-API-KEY": self.tikhub_api_key
-        }
 
-        # 发送请求
+        start_time = time.time()
         try:
-            response = await self.whisper.tts_sync(payload, headers)
-            return response
-        except ExternalAPIError as e:
-            logger.error(f"Failed to generate TikHub audio: {str(e)}")
-            raise InternalServerError("Failed to generate TikHub audio")
+            logger.info(f"开始生成音频")
+            # 获取发音人列表
+            speakers = await self.genny.get_speakers(gender, age, language)
 
+            if len(speakers) == 0:
+                logger.error("该语言和性别没有可用的发音人")
+                raise ExternalAPIError("该语言和性别没有可用的发音人")
+
+            # 选择第一个发音人
+            speaker_id = speakers[0]['id']
+            speaker_name = speakers[0]['displayName']
+
+            # 生成音频文件
+            audio_info = await self.genny.generate_voice(text, speaker_id, speed)
+
+            audio_summary = {
+                "audio_url": audio_info['data'][0]['urls'][0],
+                "progress": audio_info['progress'],
+                "status": audio_info['status'],
+                "meta": {
+                    "speaker": speaker_name,
+                    "language": language,
+                    "gender": gender,
+                    "age": age,
+                    "speed": speed,
+                    "generated_at": datetime.now().isoformat(),
+                    "processing_time": time.time() - start_time
+                }
+            }
+
+            logger.info(f"生成Tiktok音频成功，耗时: {time.time() - start_time:.2f}秒")
+
+            return audio_summary
+        except ExternalAPIError as e:
+            logger.error(f"无法生成Tiktok音频: {str(e)}")
+            raise ExternalAPIError("无法生成Tiktok音频")
+        except Exception as e:
+            logger.error(f"未知错误: {str(e)}")
+            raise InternalServerError("未知错误")
+
+    async def text_to_audio(self, prompt: str, scenarioType: str, language: str, gender: str, age: str, speed: int = 1) -> Dict[str, Any]:
+        """
+        根据用户输入关键词生成音频
+
+        Args:
+            prompt: 用户提示
+            scenarioType: 场景类型
+            language: 语言
+            gender: 性别
+            age: 年龄
+            speed: 语速
+
+        Returns:
+            转换后的文本
+        """
+        start_time = time.time()
+
+        try:
+            # 生成文本
+            script = await self.text_to_script(prompt, scenarioType, language)
+
+            # 生成音频
+            audio = await self.script_to_audio(script['transcript'], language,gender, age, speed)
+
+            return audio
+        except ValidationError:
+            # 直接向上传递验证错误
+            raise
+        except ExternalAPIError:
+            # 直接向上传递API错误
+            raise
+        except Exception as e:
+            logger.error(f"生成音频时发生未预期错误: {str(e)}")
+            raise InternalServerError(f"生成音频时发生未预期错误: {str(e)}")
+
+
+async def run_test():
+    agent = AudioGeneratorAgent()
+    prompt = "Create a short story about Nezha"
+    scenarioType = "storytelling"
+    language = "zh-CN"
+    gender = "female"
+    age = "young_adult"
+
+    try:
+        result = await agent.text_to_audio(prompt, scenarioType, language, gender, age)
+        print(result)
+    except Exception as e:
+        print(e)
+
+if __name__ == "__main__":
+    asyncio.run(run_test())
 
