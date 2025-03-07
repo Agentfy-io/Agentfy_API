@@ -37,14 +37,17 @@ async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
 
 @router.post(
     "/fetch_single_video_data",
-    summary="获取/清洗 视频关键数据",
+    summary="【一键取数】快速获取/清洗 视频关键数据",
     description="""
 用途:
-   * 获取TikTok视频数据，返回清洗后的app端视频数据
+  * 一键获取并清洗TikTok视频的核心数据（如点赞、评论、转发数，以及创作者信息、视频设置等）
+  * 点赞、评论、转发等数据，以及相关音乐、创作者信息、视频描述、视频设置等
+
 参数:
-   * aweme_id: TikTok视频ID
-返回: 视频点赞，评论，转发等数据。相关音乐，视频创作者，视频描述，视频设置等数据
-   * 
+  * aweme_id: TikTok视频ID
+
+
+（从此无需手动爬取，秒级呈现视频核心！）
 """,
     response_model_exclude_none=True,
 )
@@ -54,7 +57,7 @@ async def fetch_single_video_data(
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
     """
-    获取指定TikTok视频的\数据
+    获取指定TikTok视频的数据
 
     - **aweme_id**: TikTok视频ID
 
@@ -63,7 +66,7 @@ async def fetch_single_video_data(
     start_time = time.time()
 
     try:
-        logger.info(f"获取视频 {aweme_id} 的评论")
+        logger.info(f"获取视频 {aweme_id} 的信息")
 
         video_data = video_agent.fetch_video_data(aweme_id)
 
@@ -84,20 +87,22 @@ async def fetch_single_video_data(
         raise HTTPException(status_code=e.status_code, detail=e.detail)
 
     except Exception as e:
-        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
+        logger.error(f"获取视频信息时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
 
 @router.post(
     "/analyze_video_info",
-    summary="分析/生成 视频统计数据报告",
+    summary="【数据报告】深度分析视频统计信息",
     description="""
 用途:
-    * 分析TikTok视频数据，返回一个视频报告
+  * 针对TikTok视频的各项指标进行深度解读，自动生成数据报告
+  * 返回视频数据分析报告markdown string（含播放、互动、受众画像等要点）
+
 参数:
-    * aweme_id: TikTok视频ID
-返回: 
-    * 视频数据分析报告
+  * aweme_id: TikTok视频ID
+
+（高效洞察视频价值，一眼看穿数据背后的真相！）
 """,
     response_model_exclude_none=True,
 )
@@ -109,7 +114,7 @@ async def analyze_video_info(
     """
     分析TikTok视频数据
 
-    - **video_data**: TikTok视频数据
+    - **aweme_id**: TikTok视频ID
 
     返回视频数据分析报告
     """
@@ -140,16 +145,20 @@ async def analyze_video_info(
         logger.error(f"分析视频数据时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
+
 @router.post(
     "/fetch_video_transcript",
-    summary="分析/转录 视频音频",
+    summary="【音频转录】快速分析/提取 视频字幕内容",
     description="""
 用途:
-    * 分析TikTok视频字幕
+  * 获取TikTok视频的音频字幕或语言文本
+  * Optional: 可以指定提取的音频的语言
+
 参数:
-    * aweme_id: TikTok视频ID
-返回:
-    * 视频字幕分析报告
+  * aweme_id: TikTok视频ID
+  
+
+（精准提炼视频主旨，为视频内容理解与创意编排提供支持！）
 """,
     response_model_exclude_none=True,
 )
@@ -161,7 +170,7 @@ async def fetch_video_transcript(
     """
     分析TikTok视频字幕
 
-    - **video_data**: TikTok视频数据
+    - **aweme_id**: TikTok视频ID
 
     返回视频字幕分析报告
     """
@@ -192,17 +201,20 @@ async def fetch_video_transcript(
         logger.error(f"分析视频字幕时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
+
 @router.post(
     "/analyze_video_frames",
-    summary="分析/获取 视频关键帧内容",
+    summary="【画面识别】洞悉视频关键帧内容",
     description="""
 用途:
-    * 分析TikTok视频帧
+  * 逐帧采样并识别TikTok视频中的关键视觉元素
+  * 根据自定义的分析帧间隔，提取画面核心信息：场景、人物、动作等
+
 参数:
-    * aweme_id: TikTok视频ID
-    * frame_interval: 分析帧之间的间隔（秒）
-返回:
-    * 视频帧分析报告
+  * aweme_id: TikTok视频ID
+  * frame_interval: 分析帧之间的间隔（秒）
+
+（图像识别省时省力，为视频精修与创意编排助力！）
 """,
     response_model_exclude_none=True,
 )
@@ -215,7 +227,7 @@ async def analyze_video_frames(
     """
     分析TikTok视频帧
 
-    - **video_data**: TikTok视频数据
+    - **aweme_id**: TikTok视频ID
 
     返回视频帧分析报告
     """
@@ -246,18 +258,23 @@ async def analyze_video_frames(
         logger.error(f"分析视频帧时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
+
 @router.post(
     "/fetch_invideo_text",
-    summary="分析/提取 视频内文字",
+    summary="【文字扫描】自动提取 视频内文字内容",
     description="""
 用途:
-    * 提取TikTok视频内文字
+  * 高精度检测并识别视频画面中的文字
+  * 针对于产品讲解或者信息类标识的视频，提取产品名字，价格等信息
+  * 识别多种语言，多种场景类型，可后期用于配音字幕等
+  * 返回视频内文字提取报告 （时间戳，帧数，文字内容）
+
 参数:
-    * aweme_id: TikTok视频ID
-    * frame_interval: 分析帧之间的间隔（秒）
-    * confidence_threshold: 文字识别置信度阈值
-返回:
-    * 视频内文字提取报告
+  * aweme_id: TikTok视频ID
+  * frame_interval: 分析帧之间的间隔（秒）
+  * confidence_threshold: 文字识别置信度阈值
+
+（让视频画面中的所有文字无所遁形，彻底捕捉宣传与信息点！）
 """,
     response_model_exclude_none=True,
 )
@@ -271,7 +288,9 @@ async def fetch_invideo_text(
     """
     提取TikTok视频内文字
 
-    - **video_data**: TikTok视频数据
+    - **aweme_id**: TikTok视频ID
+    - **frame_interval**: 分析帧之间的间隔（秒）
+    - **confidence_threshold**: 文字识别置信度阈值
 
     返回视频内文字提取报告
     """
@@ -301,4 +320,3 @@ async def fetch_invideo_text(
     except Exception as e:
         logger.error(f"提取视频内文字时发生未预期错误: {str(e)}")
         raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
-
