@@ -123,7 +123,7 @@ async def analyze_video_info(
     try:
         logger.info(f"分析视频统计数据")
 
-        video_report = video_agent.analyze_video_info(aweme_id)
+        video_report = await video_agent.analyze_video_info(aweme_id)
 
         processing_time = time.time() - start_time
 
@@ -179,7 +179,7 @@ async def fetch_video_transcript(
     try:
         logger.info(f"分析视频字幕")
 
-        video_transcript = video_agent.fetch_video_transcript(aweme_id)
+        video_transcript = await video_agent.fetch_video_transcript(aweme_id)
 
         processing_time = time.time() - start_time
 
@@ -236,7 +236,7 @@ async def analyze_video_frames(
     try:
         logger.info(f"分析视频帧")
 
-        video_frames = video_agent.analyze_video_frames(aweme_id, frame_interval)
+        video_frames = await video_agent.analyze_video_frames(aweme_id, frame_interval)
 
         processing_time = time.time() - start_time
 
@@ -299,7 +299,7 @@ async def fetch_invideo_text(
     try:
         logger.info(f"提取视频内文字")
 
-        invideo_text = video_agent.fetch_invideo_text(aweme_id, frame_interval, confidence_threshold)
+        invideo_text = await video_agent.fetch_invideo_text(aweme_id, frame_interval, confidence_threshold)
 
         processing_time = time.time() - start_time
 

@@ -7,6 +7,7 @@
 
 import json
 import re
+import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
 import asyncio
@@ -28,6 +29,7 @@ from services.crawler.comment_crawler import CommentCollector
 from services.crawler.video_crawler import VideoCollector
 from services.cleaner.video_cleaner import VideoCleaner
 from app.config import settings
+from markdown import markdown  # pip install markdown
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 
 # 设置日志记录器
@@ -65,7 +67,7 @@ class VideoAgent:
 
         # 加载系统和用户提示
         self._load_system_prompts()
-        self._load_user_prompts()
+        # self._load_user_prompts()
 
     def _load_system_prompts(self):
         self.prompts = {
@@ -171,10 +173,10 @@ class VideoAgent:
         }
         # 定义函数映射
         self.function_map = {
-            "video_info": self.analyzer_video_info,
-            "video_transcript": self.analyze_video_transcript,
+            "video_info": self.analyze_video_info,
+            "video_transcript": self.fetch_video_transcript,
             "video_frames": self.analyze_video_frames,
-            "in_video_text": self.analyze_video_text,
+            "in_video_text": self.fetch_invideo_text
         }
 
     async def fetch_video_data(self, aweme_id: str) -> Dict[str, Any]:
@@ -272,9 +274,28 @@ class VideoAgent:
             analysis_results = response["choices"][0]["message"]["content"].strip()
             logger.info("✅ 已完成用户/达人基础信息分析")
 
+            # 将 Markdown 转换为 HTML
+            analysis_html = markdown(analysis_results)
+
+            # 生成一个唯一文件名
+            unique_id = str(uuid.uuid4())
+            file_name = f"report_{unique_id}.html"
+
+            # 将 HTML 写入本地文件
+            file_path = os.path.join("./reports", file_name)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                f.write(analysis_html)
+
+            # 这里返回的 temp_display_url 就是本地的文件路径或相对路径
+            # 具体如何对外访问，需要看你如何配置路由或静态文件服务
+            temp_display_url = file_path
+
+            logger.info("✅ 已完成用户/达人基础信息分析")
+
             return {
                 'aweme_id': aweme_id,
-                'video_info': analysis_results,
+                'video_info_html': analysis_html,  # 转换后的 HTML
+                'temp_display_url': temp_display_url,  # 存储的文件路径
                 'timestamp': datetime.now().isoformat(),
                 'processing_time': round(time.time() - start_time, 2)
             }

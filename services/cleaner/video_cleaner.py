@@ -33,6 +33,7 @@ class VideoCleaner:
 
         try:
             logger.info(f"清洗视频 {aweme_id}")
+            video_data = video_data.get('video', {})
 
             # 处理标签列表
             cha_list = video_data.get('cha_list', [])
