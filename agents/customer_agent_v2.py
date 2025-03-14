@@ -97,6 +97,18 @@ class CustomerAgent:
             - Any positive sentiment to the influencer herself/himself is consider neutral
             - Any engagement indicating potential future purchase""",
 
+            'purchase_intent_report': """You are a social commerce analyst specializing in conversion optimization. Your task is to create an actionable report about purchase intent and product interest in social content.
+
+                Report Sections:
+                1. Report Metadata （video ID, total number of comments, analysis timestamp）
+                2. Sales Potential Overview (2-3 sentences about overall intent metrics)
+                3. Intent Metrics (markdown table with key statistics)
+                4. Interest Patterns (3-4 bullet points about audience interest levels)
+                5. Conversion Opportunities (specific insights about potential customers)
+                6. Recommendations (2-3 actionable steps to improve conversion)
+
+                Focus on actionable insights. Use clear metrics but emphasize what they mean for business outcomes. Keep the report under 400 words.""",
+
             'customer_reply': """# # Multilingual Customer Service AI Assistant
 
             ## System Instruction
@@ -253,6 +265,118 @@ This format ensures efficient multilingual customer support while maintaining hi
                 'description': 'purchase intent'
             }
         }
+
+    async def generate_analysis_report(self, aweme_id: str, analysis_type: str, data: Dict[str, Any]) -> str:
+        """
+        生成报告并转换为HTML
+
+        Args:
+            aweme_id (str): 视频 ID
+            analysis_type (str): 分析类型
+            data (Dict[str, Any]): 分析数据
+
+        Returns:
+            str: HTML报告的本地文件URL
+        """
+        if analysis_type not in self.system_prompts:
+            raise ValueError(f"Invalid report type: {analysis_type}. Choose from {self.system_prompts.keys()}")
+
+        # 获取系统提示
+        sys_prompt = self.system_prompts[analysis_type]
+
+        # 获取用户提示
+        user_prompt = f"Generate a report for the {analysis_type} analysis based on the following data:\n{json.dumps(data, ensure_ascii=False)}, for video ID: {aweme_id}"
+
+        # 生成报告
+        response = await self.chatgpt.chat(
+            system_prompt=sys_prompt,
+            user_prompt=user_prompt
+        )
+
+        report = response["choices"][0]["message"]["content"].strip()
+
+        # 保存Markdown报告
+        report_dir = "reports"
+        os.makedirs(report_dir, exist_ok=True)
+
+        report_md_path = os.path.join(report_dir, f"report_{aweme_id}.md")
+        with open(report_md_path, "w", encoding="utf-8") as f:
+            f.write(report)
+
+        # 转换为HTML
+        html_content = self.convert_markdown_to_html(report, f"{analysis_type.title()} Analysis for {aweme_id}")
+        html_filename = f"report_{aweme_id}.html"
+        html_path = os.path.join(report_dir, html_filename)
+
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        # 生成本地文件URL
+        absolute_path = os.path.abspath(html_path)
+
+        # 构建file://协议URL
+        file_url = f"file://{absolute_path}"
+
+        # 确保路径分隔符是URL兼容的
+        if os.name == 'nt':  # Windows系统
+            # Windows路径需要转换为URL格式
+            file_url = file_url.replace('\\', '/')
+
+        print(f"报告已生成: Markdown ({report_md_path}), HTML ({html_path})")
+        print(f"报告本地URL: {file_url}")
+
+        return file_url
+
+    def convert_markdown_to_html(self, markdown_content: str, title: str = "Analysis Report") -> str:
+        """
+        将Markdown内容转换为HTML
+
+        Args:
+            markdown_content (str): Markdown内容
+            title (str): HTML页面标题
+
+        Returns:
+            str: HTML内容
+        """
+        try:
+            import markdown
+        except ImportError:
+            print("请安装markdown库: pip install markdown")
+            return f"<pre>{markdown_content}</pre>"
+
+        # 转换Markdown为HTML
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=['tables', 'fenced_code', 'codehilite', 'toc']
+        )
+
+        # 创建完整HTML文档
+        css = """
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1, h2, h3 { margin-top: 1.5em; color: #111; }
+        pre { background-color: #f6f8fa; border-radius: 3px; padding: 16px; overflow: auto; }
+        code { font-family: SFMono-Regular, Consolas, Menlo, monospace; background-color: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f6f8fa; }
+        """
+
+        html_document = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title}</title>
+        <style>{css}</style>
+    </head>
+    <body>
+        <h1>{title}</h1>
+        {html_content}
+    </body>
+    </html>
+        """
+
+        return html_document
 
     async def fetch_video_comments(
             self,
@@ -871,7 +995,6 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.error(f"分析评论时发生未预期错误: {str(e)}")
             raise InternalServerError(f"分析评论时发生未预期错误: {str(e)}")
 
-
     async def get_purchase_intent_stats(
             self,
             aweme_id: str,
@@ -936,6 +1059,9 @@ This format ensures efficient multilingual customer support while maintaining hi
                 }
             }
 
+            report_url = await self.generate_analysis_report(aweme_id,'purchase_intent_report',analysis_summary)
+            analysis_summary['report_url'] = report_url
+
             return analysis_summary
 
         except (ValidationError, ExternalAPIError, InternalServerError):
@@ -945,8 +1071,9 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.error(f"获取购买意图统计时发生未预期错误: {str(e)}")
             raise InternalServerError(f"获取购买意图统计时发生未预期错误: {str(e)}")
 
-    @staticmethod
+
     def _calculate_engagement_score(
+            self,
             sentiment: str,
             purchase_intent: bool,
             interest_level: str
@@ -1031,8 +1158,7 @@ This format ensures efficient multilingual customer support while maintaining hi
             # 返回默认值
             return 0.0
 
-    @staticmethod
-    def _analyze_sentiment_distribution(df: pd.DataFrame) -> Dict[str, Any]:
+    def _analyze_sentiment_distribution(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
         分析情感分布
 
@@ -1065,7 +1191,6 @@ This format ensures efficient multilingual customer support while maintaining hi
                 'percentages': {}
             }
 
-    @staticmethod
     def _analyze_purchase_intent(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
         分析购买意图
@@ -1113,7 +1238,6 @@ This format ensures efficient multilingual customer support while maintaining hi
                 'intent_by_interest_level': {}
             }
 
-    @staticmethod
     def _analyze_interest_levels(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
         分析兴趣水平
