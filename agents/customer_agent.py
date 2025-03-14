@@ -7,24 +7,24 @@
 
 import json
 import re
+import time
+import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
-import asyncio
-import time
 
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
 import os
 
+from app.config import settings
 from app.utils.logger import setup_logger
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from services.cleaner.comment_cleaner import CommentCleaner
+from services.cleaner.video_cleaner import VideoCleaner
 from services.crawler.comment_crawler import CommentCollector
 from services.crawler.video_crawler import VideoCollector
-from services.cleaner.video_cleaner import VideoCleaner
-from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 
 # 设置日志记录器
@@ -37,21 +37,26 @@ load_dotenv()
 class CustomerAgent:
     """处理TikTok评论的代理类，提供评论获取、分析和潜在客户识别功能"""
 
-    def __init__(self, tikhub_api_key: Optional[str] = None, tikhub_base_url: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None):
         """
         初始化CustomerAgent，加载API密钥和提示模板
 
         Args:
             tikhub_api_key: TikHub API密钥
-            tikhub_base_url: TikHub API基础URL
         """
+        self.customer_count = 0
+
         # 初始化AI模型客户端
         self.chatgpt = ChatGPT()
         self.claude = Claude()
 
+        # 初始化收集器和清洁器
+        self.comment_collector = CommentCollector(tikhub_api_key, settings.TIKHUB_BASE_URL)
+        self.comment_cleaner = CommentCleaner()
+
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
-        self.tikhub_base_url = tikhub_base_url
+        self.tikhub_base_url = settings.TIKHUB_BASE_URL
 
         # 如果没有提供TikHub API密钥，记录警告
         if not self.tikhub_api_key:
@@ -91,36 +96,49 @@ class CustomerAgent:
             - Positive reactions to product features
             - Any positive sentiment to the influencer herself/himself is consider neutral
             - Any engagement indicating potential future purchase""",
+
+            'purchase_intent_report': """You are a social commerce analyst specializing in conversion optimization. Your task is to create an actionable report about purchase intent and product interest in social content.
+
+                Report Sections:
+                1. Report Metadata （video ID, total number of comments, analysis timestamp）
+                2. Sales Potential Overview (2-3 sentences about overall intent metrics)
+                3. Intent Metrics (markdown table with key statistics)
+                4. Interest Patterns (3-4 bullet points about audience interest levels)
+                5. Conversion Opportunities (specific insights about potential customers)
+                6. Recommendations (2-3 actionable steps to improve conversion)
+
+                Focus on actionable insights. Use clear metrics but emphasize what they mean for business outcomes. Keep the report under 400 words.""",
+
             'customer_reply': """# # Multilingual Customer Service AI Assistant
-            
+
             ## System Instruction
-            
+
             You are an advanced multilingual customer service AI for an e-commerce platform. Your task is to:
             1. Analyze the store information provided by the merchant
             2. Identify the language of both the store information and customer message
             3. Generate a helpful, accurate response to the customer inquiry
             4. Return your response in a structured JSON format
-            
+
             ## Analysis Guidelines
-            
+
             1. **Language Detection**:
                - Automatically detect the language of the store information
                - Automatically detect the language of the customer message
                - Translate the customer message to the store language
                - Determine the most appropriate language for your response (typically matching the customer's language)
-            
+
             2. **Store Information Analysis**:
                - Extract key details about products, pricing, shipping, returns, promotions, etc.
                - Understand store policies across different languages
                - Identify store name and branding elements
-            
+
             3. **Customer Message Analysis**:
                - Identify the customer's primary question or concern
                - Detect any secondary questions
                - Understand the customer's tone and respond appropriately
-            
+
             ## Response Generation
-            
+
             1. **Content Creation**:
                - Provide accurate information based only on the store details provided
                - If information is not available, acknowledge this limitation politely
@@ -128,14 +146,14 @@ class CustomerAgent:
                - Be concise and to the point, avoiding unnecessary details, usually one or two sentences is enough.
                - Maintain a helpful, professional tone appropriate to the detected culture
                - Also generate a translated version of your response in the shop language
-            
+
             2. **Response Language**:
                - Respond in the same language as the customer message
                - If you cannot confidently respond in the customer's language, default to the store's language
                - Use culturally appropriate greetings and expressions
-            
+
             ## JSON Output Format
-            
+
             Your response must be formatted as a valid JSON object with the following structure:
             ```json
             {
@@ -148,7 +166,8 @@ class CustomerAgent:
               "confidence_score": 0.95
             }
             """,
-            'batch_customer_reply':"""## Multilingual Batch Customer Service AI Assistant
+
+            'batch_customer_reply': """## Multilingual Batch Customer Service AI Assistant
 ### System Instruction
 You are an advanced multilingual customer service AI for an e-commerce platform. Your task is to process multiple customer messages simultaneously and generate appropriate responses for each.
 ### Input Format
@@ -247,12 +266,133 @@ This format ensures efficient multilingual customer support while maintaining hi
             }
         }
 
-    async def fetch_video_comments(self, aweme_id: str) -> Dict[str, Any]:
+    async def generate_analysis_report(self, aweme_id: str, analysis_type: str, data: Dict[str, Any]) -> str:
+        """
+        生成报告并转换为HTML
+
+        Args:
+            aweme_id (str): 视频 ID
+            analysis_type (str): 分析类型
+            data (Dict[str, Any]): 分析数据
+
+        Returns:
+            str: HTML报告的本地文件URL
+        """
+        if analysis_type not in self.system_prompts:
+            raise ValueError(f"Invalid report type: {analysis_type}. Choose from {self.system_prompts.keys()}")
+
+        # 获取系统提示
+        sys_prompt = self.system_prompts[analysis_type]
+
+        # 获取用户提示
+        user_prompt = f"Generate a report for the {analysis_type} analysis based on the following data:\n{json.dumps(data, ensure_ascii=False)}, for video ID: {aweme_id}"
+
+        # 生成报告
+        response = await self.chatgpt.chat(
+            system_prompt=sys_prompt,
+            user_prompt=user_prompt
+        )
+
+        report = response["choices"][0]["message"]["content"].strip()
+
+        # 保存Markdown报告
+        report_dir = "reports"
+        os.makedirs(report_dir, exist_ok=True)
+
+        report_md_path = os.path.join(report_dir, f"report_{aweme_id}.md")
+        with open(report_md_path, "w", encoding="utf-8") as f:
+            f.write(report)
+
+        # 转换为HTML
+        html_content = self.convert_markdown_to_html(report, f"{analysis_type.title()} Analysis for {aweme_id}")
+        html_filename = f"report_{aweme_id}.html"
+        html_path = os.path.join(report_dir, html_filename)
+
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        # 生成本地文件URL
+        absolute_path = os.path.abspath(html_path)
+
+        # 构建file://协议URL
+        file_url = f"file://{absolute_path}"
+
+        # 确保路径分隔符是URL兼容的
+        if os.name == 'nt':  # Windows系统
+            # Windows路径需要转换为URL格式
+            file_url = file_url.replace('\\', '/')
+
+        print(f"报告已生成: Markdown ({report_md_path}), HTML ({html_path})")
+        print(f"报告本地URL: {file_url}")
+
+        return file_url
+
+    def convert_markdown_to_html(self, markdown_content: str, title: str = "Analysis Report") -> str:
+        """
+        将Markdown内容转换为HTML
+
+        Args:
+            markdown_content (str): Markdown内容
+            title (str): HTML页面标题
+
+        Returns:
+            str: HTML内容
+        """
+        try:
+            import markdown
+        except ImportError:
+            print("请安装markdown库: pip install markdown")
+            return f"<pre>{markdown_content}</pre>"
+
+        # 转换Markdown为HTML
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=['tables', 'fenced_code', 'codehilite', 'toc']
+        )
+
+        # 创建完整HTML文档
+        css = """
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1, h2, h3 { margin-top: 1.5em; color: #111; }
+        pre { background-color: #f6f8fa; border-radius: 3px; padding: 16px; overflow: auto; }
+        code { font-family: SFMono-Regular, Consolas, Menlo, monospace; background-color: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f6f8fa; }
+        """
+
+        html_document = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title}</title>
+        <style>{css}</style>
+    </head>
+    <body>
+        <h1>{title}</h1>
+        {html_content}
+    </body>
+    </html>
+        """
+
+        return html_document
+
+    async def fetch_video_comments(
+            self,
+            aweme_id: str,
+            ins_filter: bool = False,
+            twitter_filter: bool = False,
+            region_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         获取指定视频的清理后的评论数据
 
         Args:
-            aweme_id (str): 视频ID
+            aweme_id: 视频ID
+            ins_filter: 是否过滤Instagram为None的评论
+            twitter_filter: 是否过滤Twitter为None的评论
+            region_filter: 评论区域过滤器，例如"US"，"GB"等
 
         Returns:
             Dict[str, Any]: 清理后的评论数据，包含视频ID和评论列表
@@ -264,6 +404,7 @@ This format ensures efficient multilingual customer support while maintaining hi
         start_time = time.time()
 
         try:
+            # 验证输入参数
             if not aweme_id or not isinstance(aweme_id, str):
                 raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
@@ -271,9 +412,9 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.info(f"🔍 开始获取视频 {aweme_id} 的评论")
 
             # 获取评论
-            comment_collector = CommentCollector(self.tikhub_api_key, self.tikhub_base_url)
-            comments = await comment_collector.collect_video_comments(aweme_id)
+            comments = await self.comment_collector.collect_video_comments(aweme_id)
 
+            # 检查是否成功获取评论
             if not comments or not comments.get('comments'):
                 logger.warning(f"❌ 视频 {aweme_id} 未找到评论")
                 return {
@@ -284,31 +425,438 @@ This format ensures efficient multilingual customer support while maintaining hi
                 }
 
             # 清洗评论
-            comment_cleaner = CommentCleaner()
-            cleaned_comments = await comment_cleaner.clean_video_comments(comments)
+            cleaned_comments = await self.comment_cleaner.clean_video_comments(comments)
             cleaned_comments = cleaned_comments.get('comments', [])
 
+            # 转换为DataFrame便于处理
+            comments_df = pd.DataFrame(cleaned_comments)
+
+            # 应用过滤条件
+            if ins_filter:
+                comments_df = comments_df[comments_df['ins_id'] != '']
+            if twitter_filter:
+                comments_df = comments_df[comments_df['twitter_id'] != '']
+            if region_filter:
+                comments_df = comments_df[comments_df['commenter_region'] == region_filter]
+
+            # 计算处理时间
             processing_time = time.time() - start_time
 
+            # 准备返回结果
             result = {
                 'aweme_id': aweme_id,
-                'comments': cleaned_comments,
-                'comment_count': len(cleaned_comments),
+                'comments': comments_df.to_dict(orient='records'),
+                'comment_count': len(comments_df),
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round(processing_time * 1000, 2)
             }
 
-            logger.info(f"成功获取视频 {aweme_id} 的评论: {len(cleaned_comments)} 条，耗时: {processing_time:.2f}秒")
+            logger.info(f"成功获取视频 {aweme_id} 的评论: {len(comments_df)} 条，耗时: {processing_time:.2f}秒")
             return result
 
         except (ValidationError, ExternalAPIError) as e:
             # 直接向上传递这些已处理的错误
             logger.error(f"获取视频评论时出错: {str(e)}")
-            raise
-
+            raise e
         except Exception as e:
             logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
             raise InternalServerError(detail=f"获取视频评论时发生未预期错误: {str(e)}")
+
+    async def get_potential_customers(
+            self,
+            aweme_id: str,
+            batch_size: int = 30,
+            customer_count: int = 100,
+            concurrency: int = 5,
+            min_score: float = 50.0,
+            max_score: float = 100.0,
+            ins_filter: bool = False,
+            twitter_filter: bool = False,
+            region_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        获取潜在客户列表
+
+        步骤:
+        1. 调用fetch_video_comments方法获取视频评论
+        2. 使用ins_filter，twitter_filter, region_filter 去过滤数据
+        3. 使用AI模型分析符合条件评论，识别潜在客户
+        4. 返回潜在客户列表
+
+        Args:
+            aweme_id: 视频ID
+            batch_size: 每批处理的评论数量
+            customer_count: 最大潜在客户数量
+            concurrency: AI分析的并发数
+            min_score: 最小参与度分数
+            max_score: 最大参与度分数
+            ins_filter: 是否过滤Instagram为None的评论
+            twitter_filter: 是否过滤Twitter为None的评论
+            region_filter: 评论区域过滤器
+
+        Returns:
+            Dict[str, Any]: 潜在客户信息
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当出现内部处理错误时
+        """
+        start_time = time.time()
+        potential_customers = []  # 潜在客户列表
+
+        try:
+            # 获取评论数据，并且过滤+清洗
+            comments_data = await self.fetch_video_comments(aweme_id, ins_filter, twitter_filter, region_filter)
+            comments = comments_data.get('comments')
+
+            # 将comments列表转换为DataFrame
+            comments_df = pd.DataFrame(comments)
+
+            # 将清洗后的评论数据按照AI并发量（concurrency）分批处理
+            num_splits = max(1, len(comments_df) // batch_size + (1 if len(comments_df) % batch_size > 0 else 0))
+            comment_batches = np.array_split(comments_df, num_splits)
+            logger.info(
+                f"🚀 开始分析评论，共 {len(comment_batches)} 批，每批约 {len(comment_batches[0]) if len(comment_batches) > 0 else 0} 条评论"
+            )
+
+            # 按照批次处理评论
+            for i in range(0, len(comment_batches), concurrency):
+                batch_group = comment_batches[i:i + concurrency]
+                batch_indices = [
+                    f"{batch.index[0]}-{batch.index[-1]}" if not batch.empty else "-"
+                    for batch in batch_group
+                ]
+                logger.info(
+                    f"⚡ 处理批次 {i + 1} 至 {i + len(batch_group)}，评论索引范围: {batch_indices}"
+                )
+
+                # 开始使用AI模型分析评论
+                tasks = [
+                    self._analyze_aspect('purchase_intent', batch[['text', 'comment_id']].to_dict('records'))
+                    for batch in batch_group if not batch.empty
+                ]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # 处理每个批次的结果
+                for j, (batch, result) in enumerate(zip(batch_group, batch_results)):
+                    if isinstance(result, Exception) or not result:  # 如果结果为空或者是异常
+                        logger.error(f"批次 {i + j + 1} 分析失败: {str(result)}")
+                    else:
+                        result_df = pd.DataFrame(result)
+                        if not result_df.empty and 'comment_id' in result_df.columns:  # 如果结果不为空, 并且包含comment_id
+                            # 合并分析结果到原始评论
+                            merged_batch = pd.merge(
+                                batch,
+                                result_df,
+                                on='comment_id',
+                                how='left',
+                                suffixes=('', '_analysis')
+                            )
+
+                            # 计算参与度分数
+                            merged_batch['engagement_score'] = merged_batch.apply(
+                                lambda row: self._calculate_engagement_score(
+                                    row['sentiment'],
+                                    row['purchase_intent'],
+                                    row['interest_level']
+                                ),
+                                axis=1
+                            )
+
+                            # 过滤分数在min_score和max_score之间的评论
+                            filtered_batch = merged_batch[
+                                (merged_batch['engagement_score'] >= min_score) &
+                                (merged_batch['engagement_score'] <= max_score)
+                                ]
+
+                            # 记录潜在客户数量
+                            self.customer_count += len(filtered_batch)
+                            logger.info(f"批次 {i + j + 1} 处理完成: 原始评论 {len(batch)}，"
+                                        f"分析后 {len(merged_batch)}，过滤后 {len(filtered_batch)}")
+
+                            # 如果客户总数超过最大限制，则只添加到最大限制
+                            if self.customer_count > customer_count:
+                                potential_customers.extend(
+                                    filtered_batch.head(customer_count - self.customer_count).to_dict('records'))
+                                self.comment_collector.status = False  # 停止收集评论
+                                self.comment_cleaner.status = False  # 停止清洗评论
+                                logger.info(
+                                    f"现在已经有 {self.customer_count} 个潜在客户，达到最大限制 {customer_count}，停止处理")
+                                break
+
+                            # 添加到潜在客户列表
+                            potential_customers.extend(filtered_batch.to_dict('records'))
+                        else:
+                            logger.warning(f"批次 {i + j + 1} 分析结果格式无效或为空")
+                            # 保留原始批次
+                            potential_customers = batch.to_dict('records')
+
+                # 如果客户总数超过最大限制，则停止处理
+                if self.customer_count > customer_count:
+                    self.comment_collector.status = False  # 停止收集评论
+                    self.comment_cleaner.status = False  # 停止清洗评论
+                    break
+
+            # 计算处理时间并返回结果
+            processing_time = time.time() - start_time
+            logger.info(
+                f"✅ 分析完成，成功处理 {len(comments)} 条评论，客户总数: {len(potential_customers)}，耗时: {processing_time:.2f}秒")
+            return {
+                'aweme_id': aweme_id,
+                'potential_customers': potential_customers,
+                'customer_count': len(potential_customers),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round(processing_time * 1000, 2)
+            }
+        except (ValidationError, ExternalAPIError) as e:
+            # 直接向上传递这些已处理的错误
+            logger.error(f"获取潜在客户时出错: {str(e)}")
+            raise e
+        except Exception as e:
+            logger.error(f"获取潜在客户时发生未预期错误: {str(e)}")
+            raise InternalServerError(detail=f"获取潜在客户时发生未预期错误: {str(e)}")
+
+    async def get_keyword_potential_customers(
+            self,
+            keyword: str,
+            batch_size: int = 30,
+            customer_count: int = 100,
+            video_concurrency: int = 5,
+            ai_concurrency: int = 5,
+            min_score: float = 50.0,
+            max_score: float = 100.0,
+            ins_filter: bool = False,
+            twitter_filter: bool = False,
+            region_filter: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        根据关键词获取潜在客户
+
+        步骤:
+        1. 获取与关键词相关的视频
+        2. 对每个视频调用get_potential_customers方法获取潜在客户
+        3. 合并结果并过滤排序
+
+        Args:
+            keyword: 关键词
+            batch_size: 每批处理的评论数量
+            customer_count: 最大潜在客户数量
+            video_concurrency: 视频处理并发数
+            ai_concurrency: ai处理并发数
+            min_score: 最小参与度分数
+            max_score: 最大参与度分数
+            ins_filter: 是否过滤Instagram为空用户
+            twitter_filter: 是否过滤Twitter为空用户
+            region_filter: 地区过滤
+
+        Returns:
+            Dict[str, Any]: 潜在客户信息
+
+        Raises:
+            ValueError: 当参数无效时
+            RuntimeError: 当分析过程中出现错误时
+        """
+        start_time = time.time()
+        potential_customers = []  # 潜在客户列表
+
+        try:
+            # 验证输入参数
+            if not keyword or not isinstance(keyword, str):
+                raise ValueError("无效的关键词")
+
+            # 获取清理后的视频数据
+            video_collector = VideoCollector(self.tikhub_api_key, self.tikhub_base_url)
+            video_cleaner = VideoCleaner()
+            raw_videos = await video_collector.collect_videos_by_keyword(keyword)
+            cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
+
+            # 提取视频ID列表
+            videos_df = pd.DataFrame(cleaned_videos['videos'])
+            aweme_ids = videos_df['aweme_id'].tolist()
+
+            # 检查是否找到相关视频
+            if not aweme_ids:
+                logger.warning(f"未找到与关键词 {keyword} 相关的视频")
+                return {
+                    'keyword': keyword,
+                    'potential_customers': [],
+                    'customer_count': 0,
+                    'timestamp': datetime.now().isoformat()
+                }
+
+            logger.info(f"开始分析与关键词 {keyword} 相关的 {len(videos_df)} 个视频以识别潜在客户")
+
+            # 按照视频并发数处理视频
+            for i in range(0, len(aweme_ids), video_concurrency):
+                # 如果已经达到最大潜在客户数量，停止处理
+                if self.customer_count >= customer_count:
+                    self.comment_collector.status = False  # 停止收集评论
+                    self.comment_cleaner.status = False  # 停止清洗评论
+                    logger.info(f"已经达到最大潜在客户数量 {customer_count}，停止处理")
+                    break
+
+                # 获取当前批次的视频ID
+                batch_aweme_ids = aweme_ids[i:i + video_concurrency]
+                logger.info(f"处理视频批次 {i + 1} 至 {i + len(batch_aweme_ids)}")
+
+                # 为每个视频创建任务
+                tasks = [
+                    self.get_potential_customers(
+                        aweme_id,
+                        batch_size,
+                        customer_count,
+                        ai_concurrency,
+                        min_score,
+                        max_score,
+                        ins_filter,
+                        twitter_filter,
+                        region_filter
+                    )
+                    for aweme_id in batch_aweme_ids
+                ]
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # 处理每个视频的结果
+                for j, result in enumerate(batch_results):
+                    if isinstance(result, Exception) or not result:
+                        logger.error(f"视频 {aweme_ids[i + j]} 处理失败/停止处理: {str(result)}")
+                    else:
+                        potential_customers.extend(result.get('potential_customers', []))
+                        logger.info(f"视频 {aweme_ids[i + j]} 处理完成")
+
+            # 根据潜在价值过滤和排序
+            potential_customers_df = pd.DataFrame(potential_customers)
+            filtered_df = potential_customers_df[
+                potential_customers_df['engagement_score'].between(min_score, max_score)
+            ].sort_values(by='engagement_score', ascending=False)
+
+            # 计算平均潜在价值
+            avg_value = filtered_df['engagement_score'].mean() if not filtered_df.empty else 0
+
+            # 计算处理时间并返回结果
+            processing_time = time.time() - start_time
+            return {
+                'keyword': keyword,
+                'customer_count': len(potential_customers),
+                'potential_customers': potential_customers,
+                'min_engagement_score': min_score,
+                'max_engagement_score': max_score,
+                'average_potential_value': round(avg_value, 2),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round(processing_time * 1000, 2)
+            }
+        except ValueError:
+            # 直接向上传递验证错误
+            raise ValueError
+        except RuntimeError:
+            # 直接向上传递运行时错误
+            raise RuntimeError
+        except Exception as e:
+            logger.error(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
+            raise RuntimeError(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
+
+    async def _analyze_aspect(
+            self,
+            aspect_type: str,
+            comment_data: List[Dict[str, Any]],
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        通用分析方法，根据不同的分析类型调用ChatGPT或Claude AI模型。
+
+        步骤:
+        1. 验证分析类型是否支持
+        2. 构造分析提示
+        3. 调用AI模型进行分析
+        4. 解析并返回分析结果
+
+        Args:
+            aspect_type: 需要分析的类型 (purchase_intent)
+            comment_data: 需要分析的评论列表
+
+        Returns:
+            Optional[List[Dict[str, Any]]]: AI返回的分析结果，失败时抛出异常
+
+        Raises:
+            ValidationError: 当aspect_type无效时
+            ExternalAPIError: 当调用AI服务时出错
+        """
+        try:
+            # 验证分析类型是否支持
+            if aspect_type not in self.analysis_types:
+                raise ValidationError(detail=f"不支持的分析类型: {aspect_type}", field="aspect_type")
+
+            # 检查评论数据是否为空
+            if not comment_data:
+                logger.warning("评论数据为空，跳过分析")
+                return []
+
+            # 获取分析的系统提示和用户提示
+            aspect_config = self.user_prompts[aspect_type]
+            sys_prompt = self.system_prompts[aspect_type]
+            user_prompt = (
+                f"Analyze the {aspect_config['description']} for the following comments:\n"
+                f"{json.dumps(comment_data, ensure_ascii=False)}"
+            )
+
+            # 为避免token限制，限制评论文本长度
+            for comment in comment_data:
+                if 'text' in comment and len(comment['text']) > 1000:
+                    comment['text'] = comment['text'][:997] + "..."
+
+            # 尝试使用ChatGPT进行分析
+            try:
+                response = await self.chatgpt.chat(
+                    system_prompt=sys_prompt,
+                    user_prompt=user_prompt
+                )
+
+                # 解析ChatGPT返回的结果
+                analysis_results = response["choices"][0]["message"]["content"].strip()
+
+            except ExternalAPIError as e:
+                # ChatGPT失败时尝试使用Claude作为备份
+                logger.warning(f"ChatGPT分析失败，尝试使用Claude: {str(e)}")
+                try:
+                    response = await self.claude.chat(
+                        system_prompt=sys_prompt,
+                        user_prompt=user_prompt
+                    )
+                    analysis_results = response["choices"][0]["message"]["content"].strip()
+                except Exception as claude_error:
+                    logger.error(f"Claude分析也失败: {str(claude_error)}")
+                    raise ExternalAPIError(
+                        detail="所有AI服务均无法完成分析",
+                        service="AI"
+                    )
+
+            # 处理返回的JSON格式（可能包含在Markdown代码块中）
+            analysis_results = re.sub(
+                r"```json\n|\n```|```|\n",
+                "",
+                analysis_results.strip()
+            )
+
+            try:
+                analysis_result = json.loads(analysis_results)
+                return analysis_result
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析错误: {str(e)}, 原始内容: {analysis_results[:200]}...")
+                raise ExternalAPIError(
+                    detail="AI返回的结果无法解析为JSON",
+                    service="AI",
+                    original_error=e
+                )
+
+        except ValidationError:
+            # 直接向上传递验证错误
+            raise
+        except ExternalAPIError:
+            # 直接向上传递API错误
+            raise
+        except Exception as e:
+            logger.error(f"分析评论方面时发生未预期错误: {str(e)}")
+            raise InternalServerError(f"分析评论方面时发生未预期错误: {str(e)}")
 
     async def analyze_comments_batch(
             self,
@@ -340,7 +888,6 @@ This format ensures efficient multilingual customer support while maintaining hi
                     detail=f"无效的分析类型: {analysis_type}. 请从 {self.analysis_types} 中选择",
                     field="analysis_type"
                 )
-
             if df.empty:
                 raise ValidationError(detail="DataFrame不能为空", field="df")
 
@@ -448,100 +995,6 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.error(f"分析评论时发生未预期错误: {str(e)}")
             raise InternalServerError(f"分析评论时发生未预期错误: {str(e)}")
 
-    async def _analyze_aspect(
-            self,
-            aspect_type: str,
-            comment_data: List[Dict[str, Any]],
-    ) -> Optional[List[Dict[str, Any]]]:
-        """
-        通用分析方法，根据不同的分析类型调用ChatGPT或Claude AI模型。
-
-        Args:
-            aspect_type (str): 需要分析的类型 (purchase_intent)
-            comment_data (List[Dict[str, Any]]): 需要分析的评论列表
-
-        Returns:
-            Optional[List[Dict[str, Any]]]: AI返回的分析结果，失败时抛出异常
-
-        Raises:
-            ValidationError: 当aspect_type无效时
-            ExternalAPIError: 当调用AI服务时出错
-        """
-        try:
-            if aspect_type not in self.analysis_types:
-                raise ValidationError(detail=f"不支持的分析类型: {aspect_type}", field="aspect_type")
-
-            if not comment_data:
-                logger.warning("评论数据为空，跳过分析")
-                return []
-
-            # 获取分析的系统提示和用户提示
-            aspect_config = self.user_prompts[aspect_type]
-            sys_prompt = self.system_prompts[aspect_type]
-            user_prompt = (
-                f"Analyze the {aspect_config['description']} for the following comments:\n"
-                f"{json.dumps(comment_data, ensure_ascii=False)}"
-            )
-
-            # 为避免token限制，限制评论文本长度
-            for comment in comment_data:
-                if 'text' in comment and len(comment['text']) > 1000:
-                    comment['text'] = comment['text'][:997] + "..."
-
-            # 调用AI进行分析，优先使用ChatGPT，失败时尝试Claude
-            try:
-                response = await self.chatgpt.chat(
-                    system_prompt=sys_prompt,
-                    user_prompt=user_prompt
-                )
-
-                # 解析ChatGPT返回的结果
-                analysis_results = response["choices"][0]["message"]["content"].strip()
-
-            except ExternalAPIError as e:
-                logger.warning(f"ChatGPT分析失败，尝试使用Claude: {str(e)}")
-                try:
-                    # 尝试使用Claude作为备份
-                    response = await self.claude.chat(
-                        system_prompt=sys_prompt,
-                        user_prompt=user_prompt
-                    )
-                    analysis_results = response["choices"][0]["message"]["content"].strip()
-                except Exception as claude_error:
-                    logger.error(f"Claude分析也失败: {str(claude_error)}")
-                    raise ExternalAPIError(
-                        detail="所有AI服务均无法完成分析",
-                        service="AI"
-                    )
-
-            # 处理返回的JSON格式（可能包含在Markdown代码块中）
-            analysis_results = re.sub(
-                r"```json\n|\n```|```|\n",
-                "",
-                analysis_results.strip()
-            )
-
-            try:
-                analysis_result = json.loads(analysis_results)
-                return analysis_result
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON解析错误: {str(e)}, 原始内容: {analysis_results[:200]}...")
-                raise ExternalAPIError(
-                    detail="AI返回的结果无法解析为JSON",
-                    service="AI",
-                    original_error=e
-                )
-
-        except ValidationError:
-            # 直接向上传递验证错误
-            raise
-        except ExternalAPIError:
-            # 直接向上传递API错误
-            raise
-        except Exception as e:
-            logger.error(f"分析评论方面时发生未预期错误: {str(e)}")
-            raise InternalServerError(f"分析评论方面时发生未预期错误: {str(e)}")
-
     async def get_purchase_intent_stats(
             self,
             aweme_id: str,
@@ -578,16 +1031,8 @@ This format ensures efficient multilingual customer support while maintaining hi
 
             # 获取清理后的评论数据
             comments_data = await self.fetch_video_comments(aweme_id)
-
-            if not comments_data.get('comments'):
-                logger.warning(f"视频 {aweme_id} 没有评论数据")
-                return {
-                    'aweme_id': aweme_id,
-                    'error': 'No comments found',
-                    'analysis_timestamp': datetime.now().isoformat(),
-                }
-
             comments_df = pd.DataFrame(comments_data['comments'])
+
 
             logger.info(f"开始分析视频 {aweme_id} 的 {len(comments_df)} 条评论")
             analyzed_df = await self.analyze_comments_batch(
@@ -614,6 +1059,9 @@ This format ensures efficient multilingual customer support while maintaining hi
                 }
             }
 
+            report_url = await self.generate_analysis_report(aweme_id,'purchase_intent_report',analysis_summary)
+            analysis_summary['report_url'] = report_url
+
             return analysis_summary
 
         except (ValidationError, ExternalAPIError, InternalServerError):
@@ -622,6 +1070,93 @@ This format ensures efficient multilingual customer support while maintaining hi
         except Exception as e:
             logger.error(f"获取购买意图统计时发生未预期错误: {str(e)}")
             raise InternalServerError(f"获取购买意图统计时发生未预期错误: {str(e)}")
+
+
+    def _calculate_engagement_score(
+            self,
+            sentiment: str,
+            purchase_intent: bool,
+            interest_level: str
+    ) -> float:
+        """
+        计算潜在客户的参与度分数
+
+        步骤:
+        1. 标准化输入参数
+        2. 根据情感、购买意图和兴趣水平计算加权得分
+        3. 返回0-100的分数
+
+        Args:
+            sentiment: 情感分析结果 ('positive', 'neutral', 'negative')
+            purchase_intent: 是否有购买意图
+            interest_level: 兴趣水平 ('high', 'medium', 'low')
+
+        Returns:
+            float: 参与度分数 (0-100)
+        """
+        try:
+            # 参数验证和标准化
+            if not isinstance(sentiment, str):
+                sentiment = str(sentiment).lower()
+            else:
+                sentiment = sentiment.lower()
+
+            if not isinstance(purchase_intent, bool):
+                # 尝试转换为布尔值
+                if isinstance(purchase_intent, str):
+                    purchase_intent = purchase_intent.lower() in ['true', '1', 'yes', 't']
+                else:
+                    purchase_intent = bool(purchase_intent)
+
+            if not isinstance(interest_level, str):
+                interest_level = str(interest_level).lower()
+            else:
+                interest_level = interest_level.lower()
+
+            # 修正情感标签
+            if sentiment in ['neg', 'negative']:
+                sentiment = 'negative'
+            elif sentiment in ['pos', 'positive']:
+                sentiment = 'positive'
+            elif sentiment not in ['neutral']:
+                sentiment = 'neutral'  # 默认为中性
+
+            # 处理兴趣水平中值的不同表示
+            if interest_level in ['mid', 'medium']:
+                interest_level = 'medium'
+            elif interest_level not in ['high', 'low']:
+                interest_level = 'low'  # 默认为低兴趣
+
+            # 1. 情感转换 (0-1 scale)
+            sentiment_score = {
+                'positive': 1.0,
+                'neutral': 0.5,
+                'negative': 0.0
+            }.get(sentiment, 0.5)  # 默认为中性
+
+            # 2. 购买意图分数
+            intent_score = 1.0 if purchase_intent else 0.0
+
+            # 3. 兴趣水平分数
+            interest_score = {
+                'high': 1.0,
+                'medium': 0.5,
+                'low': 0.2
+            }.get(interest_level, 0.5)  # 默认为中等
+
+            # 根据加权平均计算潜在价值
+            potential_value = (
+                                      0.3 * sentiment_score +
+                                      0.4 * intent_score +
+                                      0.3 * interest_score
+                              ) * 100  # 缩放到0-100
+
+            return round(potential_value, 2)
+
+        except Exception as e:
+            logger.error(f"计算参与度分数时出错: {str(e)}")
+            # 返回默认值
+            return 0.0
 
     def _analyze_sentiment_distribution(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
@@ -734,375 +1269,6 @@ This format ensures efficient multilingual customer support while maintaining hi
                 'counts': {},
                 'percentages': {}
             }
-
-    async def get_potential_customers(
-            self,
-            aweme_id: str,
-            batch_size: int = 30,
-            concurrency: int = 5,
-            min_score: float = 50.0,
-            max_score: float = 100.0,
-            ins_filter: bool = False,
-            twitter_filter: bool = False,
-            region_filter: Optional[str] = None
-    ) -> Dict[str, Any]:
-        """
-        计算潜在客户的参与度分数，并识别潜在客户
-
-        Args:
-            aweme_id (str): 视频ID
-            batch_size (int, optional): 每批处理的评论数量，默认30
-            concurrency (int, optional): ai处理并发数，默认5
-            min_score (float, optional): 最小参与度分数，默认50.0
-            max_score (float, optional):f 最大参与度分数，默认100.0
-            ins_filter (bool, optional): 是否过滤Instagram为Null用户，默认False
-            twitter_filter (bool, optional): 是否过滤Twitter为Null用户，默认False
-            region_filter (Optional[str], optional): 过滤特定地区的用户，默认None
-
-        Returns:
-            Dict[str, Any]: 潜在客户信息
-
-        Raises:
-            ValueError: 当参数无效时
-            RuntimeError: 当分析过程中出现错误时
-        """
-        try:
-            # 参数验证
-            if not aweme_id:
-                raise ValueError("aweme_id不能为空")
-
-            if min_score < 0 or max_score > 100 or min_score >= max_score:
-                raise ValueError("分数范围无效，应该满足: 0 <= min_score < max_score <= 100")
-
-
-            # 获取清理后的评论数据
-            cleaned_comments = await self.fetch_video_comments(aweme_id)
-
-            if not cleaned_comments.get('comments'):
-                logger.warning(f"视频 {aweme_id} 没有评论数据")
-                return {
-                    'aweme_id': aweme_id,
-                    'error': 'No comments found',
-                    'analysis_timestamp': datetime.now().isoformat(),
-                }
-
-            cleaned_comments = cleaned_comments.get('comments', [])
-            comments_df = pd.DataFrame(cleaned_comments)
-
-            # 过滤条件
-            if ins_filter:
-                comments_df = comments_df[comments_df['ins_id']!= '']
-            if twitter_filter:
-                comments_df = comments_df[comments_df['twitter_id']!= '']
-            if region_filter:
-                comments_df = comments_df[comments_df['commenter_region'] == region_filter]
-            if comments_df.empty:
-                logger.warning(f"视频 {aweme_id} 没有符合过滤条件的评论")
-                return {
-                    'aweme_id': aweme_id,
-                    'error': 'No comments found after filtering',
-                    'analysis_timestamp': datetime.now().isoformat(),
-                }
-            logger.info(f"开始分析视频 {aweme_id} 的 {len(comments_df)} 条评论以识别潜在客户")
-
-            analyzed_df = await self.analyze_comments_batch(
-                comments_df,
-                'purchase_intent',
-                batch_size,
-                concurrency
-            )
-
-            if analyzed_df.empty:
-                raise RuntimeError(f"分析视频 {aweme_id} 的评论失败")
-
-            # 计算每个用户的参与度分数
-            potential_customers = []
-            for _, row in analyzed_df.iterrows():
-                try:
-                    potential_value = self._calculate_engagement_score(
-                        row['sentiment'],
-                        row['purchase_intent'],
-                        row['interest_level']
-                    )
-
-                    # 检查必填字段
-                    user_id = row.get('commenter_uniqueId', '')
-                    sec_uid = row.get('commenter_secuid', '')
-                    text = row.get('text')
-
-                    #if not all([user_id, sec_uid, text]):
-                    #    logger.warning(f"评论数据缺少必要字段，跳过: {row}")
-                    #    continue
-
-                    potential_customers.append({
-                        'user_uniqueId': user_id,
-                        'potential_value': potential_value,
-                        'user_secuid': sec_uid,
-                        'ins_id': row.get('ins_id', ''),
-                        'twitter_id': row.get('twitter_id', ''),
-                        'region': row.get('commenter_region', ''),
-                        'text': text
-                    })
-                except Exception as e:
-                    logger.error(f"处理用户评论时出错: {str(e)}, 跳过该评论")
-                    continue
-
-            # 创建潜在客户DataFrame
-            if not potential_customers:
-                logger.warning(f"未找到任何潜在客户")
-                return {
-                    'aweme_id': aweme_id,
-                    'total_potential_customers': 0,
-                    'min_engagement_score': min_score,
-                    'max_engagement_score': max_score,
-                    'average_potential_value': 0,
-                    'potential_customers': []
-                }
-
-            potential_customers_df = pd.DataFrame(potential_customers)
-
-            # 根据潜在价值过滤和排序
-            filtered_df = potential_customers_df[
-                potential_customers_df['potential_value'].between(min_score, max_score)
-            ].sort_values(by='potential_value', ascending=False)
-
-            avg_value = filtered_df['potential_value'].mean() if not filtered_df.empty else 0
-
-            return {
-                'aweme_id': aweme_id,
-                'total_potential_customers': len(filtered_df),
-                'min_engagement_score': min_score,
-                'max_engagement_score': max_score,
-                'average_potential_value': round(avg_value, 2),
-                'potential_customers': filtered_df.to_dict(orient='records'),
-                'analysis_timestamp': datetime.now().isoformat()
-            }
-
-        except ValueError:
-            # 直接向上传递验证错误
-            raise ValueError
-        except RuntimeError:
-            # 直接向上传递运行时错误
-            raise RuntimeError
-        except Exception as e:
-            logger.error(f"获取潜在客户时发生未预期错误: {str(e)}")
-            raise RuntimeError(f"获取潜在客户时发生未预期错误: {str(e)}")
-
-
-    def _calculate_engagement_score(
-            self,
-            sentiment: str,
-            purchase_intent: bool,
-            interest_level: str
-    ) -> float:
-        """
-        计算潜在客户的参与度分数
-
-        Args:
-            sentiment (str): 情感分析结果 ('positive', 'neutral', 'negative')
-            purchase_intent (bool): 是否有购买意图
-            interest_level (str): 兴趣水平 ('high', 'medium', 'low')
-
-        Returns:
-            float: 参与度分数 (0-100)
-        """
-        try:
-            # 参数验证和标准化
-            if not isinstance(sentiment, str):
-                sentiment = str(sentiment).lower()
-            else:
-                sentiment = sentiment.lower()
-
-            if not isinstance(purchase_intent, bool):
-                # 尝试转换为布尔值
-                if isinstance(purchase_intent, str):
-                    purchase_intent = purchase_intent.lower() in ['true', '1', 'yes', 't']
-                else:
-                    purchase_intent = bool(purchase_intent)
-
-            if not isinstance(interest_level, str):
-                interest_level = str(interest_level).lower()
-            else:
-                interest_level = interest_level.lower()
-
-            # 修正情感标签
-            if sentiment in ['neg', 'negative']:
-                sentiment = 'negative'
-            elif sentiment in ['pos', 'positive']:
-                sentiment = 'positive'
-            elif sentiment not in ['neutral']:
-                sentiment = 'neutral'  # 默认为中性
-
-            # 处理兴趣水平中值的不同表示
-            if interest_level in ['mid', 'medium']:
-                interest_level = 'medium'
-            elif interest_level not in ['high', 'low']:
-                interest_level = 'low'  # 默认为低兴趣
-
-            # 1. 情感转换 (0-1 scale)
-            sentiment_score = {
-                'positive': 1.0,
-                'neutral': 0.5,
-                'negative': 0.0
-            }.get(sentiment, 0.5)  # 默认为中性
-
-            # 2. 购买意图分数
-            intent_score = 1.0 if purchase_intent else 0.0
-
-            # 3. 兴趣水平分数
-            interest_score = {
-                'high': 1.0,
-                'medium': 0.5,
-                'low': 0.2
-            }.get(interest_level, 0.5)  # 默认为中等
-
-            # 根据加权平均计算潜在价值
-            potential_value = (
-                                      0.3 * sentiment_score +
-                                      0.4 * intent_score +
-                                      0.3 * interest_score
-                              ) * 100  # 缩放到0-100
-
-            return round(potential_value, 2)
-
-        except Exception as e:
-            logger.error(f"计算参与度分数时出错: {str(e)}")
-            # 返回默认值
-            return 0.0
-
-    async def get_keyword_potential_customers(
-            self,
-            keyword: str,
-            batch_size: int = 30,
-            video_concurrency: int = 5,
-            ai_concurrency: int = 5,
-            min_score: float = 50.0,
-            max_score: float = 100.0,
-            ins_filter: bool = False,
-            twitter_filter: bool = False,
-            region_filter: Optional[str] = None,
-            max_customers: Optional[int] = None,
-    ) -> Dict[str, Any]:
-        """
-        根据关键词获取潜在客户
-
-        Args:
-            keyword (str): 关键词
-            batch_size (int, optional): 每批处理的评论数量，默认30
-            video_concurrency (int, optional): 视频处理并发数，默认5
-            ai_concurrency (int, optional): ai处理并发数，默认5
-            min_score (float, optional): 最小参与度分数，默认50.0
-            max_score (float, optional): 最大参与度分数，默认100.0
-            ins_filter (bool, optional): 是否过滤Instagram为空用户，默认False
-            twitter_filter (bool, optional): 是否过滤Twitter为空用户，默认False
-            region_filter (str, optional): 地区过滤，默认None
-            max_customers (int, optional): 最大潜在客户数量，默认None, None表示不限制
-
-        Returns:
-            Dict[str, Any]: 潜在客户信息
-
-        Raises:
-            ValueError: 当参数无效时
-            RuntimeError: 当分析过程中出现错误时
-        """
-        try:
-            # 参数验证
-            if not keyword:
-                raise ValueError("keyword不能为空")
-
-            if min_score < 0 or max_score > 100 or min_score >= max_score:
-                raise ValueError("分数范围无效，应该满足: 0 <= min_score < max_score <= 100")
-
-            # 获取清理后的视频数据
-            video_collector = VideoCollector(self.tikhub_api_key, self.tikhub_base_url)
-            video_cleaner = VideoCleaner()
-            raw_videos = await video_collector.collect_videos_by_keyword(keyword)
-            cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
-
-            if not cleaned_videos.get('videos'):
-                logger.warning(f"未找到与关键词 {keyword} 相关的视频")
-                return {
-                    'keyword': keyword,
-                    'error': '没有找到相关视频',
-                    'analysis_timestamp': datetime.now().isoformat(),
-                }
-
-            videos_df = pd.DataFrame(cleaned_videos['videos'])
-            aweme_ids = videos_df['aweme_id'].tolist()
-
-            logger.info(f"开始分析与关键词 {keyword} 相关的 {len(videos_df)} 个视频以识别潜在客户")
-
-            # 使用get_potential_customers方法分析每个视频，每concurrency个视频为一组，
-            potential_customers = []
-            for i in range(0, len(aweme_ids), video_concurrency):
-                batch_aweme_ids = aweme_ids[i:i + video_concurrency]
-                tasks = [
-                    self.get_potential_customers(
-                        aweme_id,
-                        batch_size,
-                        ai_concurrency,
-                        min_score,
-                        max_score,
-                        ins_filter,
-                        twitter_filter,
-                        region_filter,
-                    ) for aweme_id in batch_aweme_ids
-                ]
-
-                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                for result in batch_results:
-                    if isinstance(result, Exception):
-                        logger.error(f"处理视频 {batch_aweme_ids} 时出错: {str(result)}")
-                        continue
-
-                    if result.get('potential_customers') is None:
-                        logger.warning(f"视频 {batch_aweme_ids} 没有潜在客户数据")
-                        continue
-
-                    potential_customers.extend(result['potential_customers'])
-                    if len(potential_customers) >= max_customers:
-                        break
-                if len(potential_customers) >= max_customers:
-                    break
-            # 创建潜在客户DataFrame
-            if not potential_customers:
-                logger.warning(f"未找到任何潜在客户")
-                return {
-                    'keyword': keyword,
-                    'total_potential_customers': 0,
-                    'min_engagement_score': min_score,
-                    'max_engagement_score': max_score,
-                    'average_potential_value': 0,
-                    'potential_customers': []
-                }
-
-            potential_customers_df = pd.DataFrame(potential_customers)
-            # 根据潜在价值过滤和排序
-            filtered_df = potential_customers_df[
-                potential_customers_df['potential_value'].between(min_score, max_score)
-            ].sort_values(by='potential_value', ascending=False)
-
-            avg_value = filtered_df['potential_value'].mean() if not filtered_df.empty else 0
-
-            return {
-                'keyword': keyword,
-                'total_potential_customers': len(filtered_df),
-                'min_engagement_score': min_score,
-                'max_engagement_score': max_score,
-                'average_potential_value': round(avg_value, 2),
-                'potential_customers': filtered_df.to_dict(orient='records'),
-                'analysis_timestamp': datetime.now().isoformat()
-            }
-        except ValueError:
-            # 直接向上传递验证错误
-            raise ValueError
-        except RuntimeError:
-            # 直接向上传递运行时错误
-            raise RuntimeError
-        except Exception as e:
-            logger.error(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
-            raise RuntimeError(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
 
     async def generate_single_reply_message(
             self,
@@ -1275,120 +1441,13 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.error(f"批量生成客户回复消息时发生未预期错误: {str(e)}", exc_info=True)
             raise RuntimeError(f"批量生成客户回复消息时发生未预期错误: {str(e)}")
 
+
 async def main():
-    # 创建CustomerAgent实例
+    """主函数，用于测试CustomerAgent功能"""
     agent = CustomerAgent()
-
-    # 示例：获取keyword潜在客户
-    #keyword = "red liptick"
-    #potential_customers = await agent.get_keyword_potential_customers(keyword,20, 5, 5, 0, 100.0, True, False, 'US', 100)
-
-    #save to json
-    #with open('potential_customers.json', 'w', encoding='utf-8') as f:
-    #    json.dump(potential_customers, f, ensure_ascii=False, indent=4)
-
-    # 生成单条客户回复消息测试
-    shop_info = """
-    店铺名称：优雅时尚屋
-店铺简介：优雅时尚屋成立于2015年，专注于提供高品质的时尚服装和配饰。我们致力于为客户提供最新的时尚趋势和永恒的经典款式。
-
-产品信息：
-- 女士连衣裙：价格范围在￥299-￥899，材质包括棉、丝绸和混纺面料
-- 男士衬衫：价格范围在￥199-￥599，有多种款式和颜色可选
-- 时尚包包：价格范围在￥499-￥1899，有真皮和高级PU材质可选
-- 精美首饰：价格范围在￥99-￥699，包括项链、耳环和手链
-
-促销活动：
-- 新用户首单满￥500减￥50
-- 每周三会员日，全场9折
-- 季末清仓，指定商品低至5折
-
-配送政策：
-- 国内订单满￥199免运费，否则运费￥15
-- 国际配送可发往亚洲、欧洲、北美等地区，运费根据重量和目的地计算
-- 正常订单处理时间为1-2个工作日，国内配送3-5天，国际配送7-15天
-
-退换政策：
-- 收到商品后7天内可申请退换
-- 商品需保持原包装和吊牌完好
-- 定制商品和特价商品不支持退换
-
-支付方式：
-- 支持支付宝、微信支付、银联卡和主流国际信用卡
-- 国际订单支持PayPal支付
-
-联系方式：
-- 客服电话：400-888-7777（工作日9:00-18:00）
-- 客服邮箱：service@elegantfashion.com
-- 微信公众号：优雅时尚屋"""
-    #customer_id = "12345"
-    #customer_message = "Où puis-je trouver les informations sur la livraison ?"
-    #reply_lang = "zh"
-
-    #reply_message = await agent.generate_single_reply_message(shop_info, customer_id, customer_message)
-    #print(reply_message)
-
-    # 生成批量客户回复消息测试
-    customer_messages = [
-        {
-            "commenter_uniqueId": "user1",
-            "comment_id": "c1",
-            "text": "Où puis-je trouver les informations sur la livraison ?"  # 法语: 我在哪里可以找到配送信息？
-        },
-        {
-            "commenter_uniqueId": "user2",
-            "comment_id": "c2",
-            "text": "What is the return policy?"  # 英语: 退货政策是什么？
-        },
-        {
-            "commenter_uniqueId": "user3",
-            "comment_id": "c3",
-            "text": "¿Cuánto tiempo tarda en llegar mi pedido a España?"  # 西班牙语: 我的订单多久能送到西班牙？
-        },
-        {
-            "commenter_uniqueId": "user4",
-            "comment_id": "c4",
-            "text": "この商品は日本に配送できますか？送料はいくらですか？"  # 日语: 这个商品可以送到日本吗？运费是多少？
-        },
-        {
-            "commenter_uniqueId": "user5",
-            "comment_id": "c5",
-            "text": "Ich möchte wissen, ob die Größe M noch verfügbar ist?"  # 德语: 我想知道M码是否还有库存？
-        },
-        {
-            "commenter_uniqueId": "user6",
-            "comment_id": "c6",
-            "text": "Ho fatto un ordine tre giorni fa ma non ho ricevuto nessuna conferma. Potete aiutarmi?"
-            # 意大利语: 我三天前下了订单但没收到确认。您能帮我吗？
-        },
-        {
-            "commenter_uniqueId": "user7",
-            "comment_id": "c7",
-            "text": "Принимаете ли вы оплату PayPal?"  # 俄语: 你们接受PayPal付款吗？
-        },
-        {
-            "commenter_uniqueId": "user8",
-            "comment_id": "c8",
-            "text": "我想了解一下这个产品的材质是什么？是纯棉的吗？"  # 中文: 询问产品材质
-        },
-        {
-            "commenter_uniqueId": "user9",
-            "comment_id": "c9",
-            "text": "Do you offer express shipping? I need this item by next week."  # 英语: 你们提供快递吗？我需要下周收到这个物品。
-        },
-        {
-            "commenter_uniqueId": "user10",
-            "comment_id": "c10",
-            "text": "هل تشحنون إلى المملكة العربية السعودية؟ وكم تكلفة الشحن؟"  # 阿拉伯语: 你们发货到沙特阿拉伯吗？运费是多少？
-        }
-    ]
-
-    batch_reply_messages = await agent.generate_customer_reply_messages(shop_info, customer_messages, 10)
-    print(batch_reply_messages)
-
+    # 获取潜在客户
+    result = await agent.get_keyword_potential_customers("iphone 13", customer_count=400, min_score=50, max_score=100)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-

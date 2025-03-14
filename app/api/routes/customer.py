@@ -20,7 +20,7 @@ from app.api.models.customer import (
     PotentialCustomersAnalysis
 )
 from app.api.models.responses import create_response
-from agents.customer_agent_v2 import CustomerAgent
+from agents.customer_agent import CustomerAgent
 from app.core.exceptions import (
     ValidationError,
     ExternalAPIError,
@@ -221,7 +221,6 @@ async def get_potential_customers(
 
     try:
         logger.info(f"识别视频 {aweme_id} 的潜在客户")
-        logger.info(min_score, max_score)
 
         result = await customer_agent.get_potential_customers(
             aweme_id,
