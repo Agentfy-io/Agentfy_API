@@ -20,7 +20,7 @@ from app.api.models.customer import (
     PotentialCustomersAnalysis
 )
 from app.api.models.responses import create_response
-from agents.customer_agent import CustomerAgent
+from agents.customer_agent_v2 import CustomerAgent
 from app.core.exceptions import (
     ValidationError,
     ExternalAPIError,
@@ -46,7 +46,7 @@ async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key
 
 @router.post(
     "/fetch_video_comments",
-    summary="【一键直达】快速获取指定视频高价值评论数据",
+    summary="【一键直达】快速获取指定视频评论数据",
     description="""
 用途:
   * 获取TikTok视频评论数据，返回清洗后的评论列表
@@ -62,12 +62,18 @@ async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key
 async def fetch_video_comments(
         request: Request,
         aweme_id: str = Query(..., description="TikTok视频ID"),
+        ins_filter: Optional[bool] = Query(False, description="是否过滤Instagram为空的用户"),
+        twitter_filter: Optional[bool] = Query(False, description="是否过滤Twitter为空的用户"),
+        region_filter: Optional[str] = Query(None, description="按地区过滤用户"),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """
     获取指定TikTok视频的评论数据
 
     - **aweme_id**: TikTok视频ID
+    - **ins_filter**: 是否过滤Instagram为空的用户，默认为False
+    - **twitter_filter**: 是否过滤Twitter为空的用户，默认为False
+    - **region_filter**: 按地区过滤用户，默认不过滤
 
     返回清理后的评论列表
     """
@@ -76,7 +82,7 @@ async def fetch_video_comments(
     try:
         logger.info(f"获取视频 {aweme_id} 的评论")
 
-        comments_data = await customer_agent.fetch_video_comments(aweme_id)
+        comments_data = await customer_agent.fetch_video_comments(aweme_id, ins_filter, twitter_filter, region_filter)
 
         processing_time = time.time() - start_time
 
@@ -169,7 +175,7 @@ async def analyze_purchase_intent(
 
 
 @router.post(
-    "/fetch_potential_customers",
+    "/get_potential_customers",
     summary="【深度挖掘】指定视频中潜在客户信息",
     description="""
 用途:
@@ -188,12 +194,17 @@ async def analyze_purchase_intent(
 """,
     response_model_exclude_none=True,
 )
-async def identify_potential_customers(
+async def get_potential_customers(
         request: Request,
         aweme_id: str = Query(..., description="TikTok视频ID"),
-        batch_size: int = Query(30, description="每批处理评论数量"),
-        min_score: int = Query(50, description="最小参与度分数，范围0-100"),
-        max_score: int = Query(100, description="最大参与度分数，范围1-100"),
+        batch_size: int = Query(30, description="ai每批处理评论数量"),
+        customer_count: int = Query(100, description="最大返回客户数量"),
+        concurrency: int = Query(5, description="ai处理并发数"),
+        min_score: Optional[int] = Query(50, description="最小参与度分数，范围0-100"),
+        max_score: Optional[int] = Query(100, description="最大参与度分数，范围1-100"),
+        ins_filter: Optional[bool] = Query(False, description="是否过滤Instagram为空的用户"),
+        twitter_filter: Optional[bool] = Query(False, description="是否过滤Twitter为空的用户"),
+        region_filter: Optional[str] = Query(None, description="按地区过滤用户"),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """
@@ -210,14 +221,19 @@ async def identify_potential_customers(
 
     try:
         logger.info(f"识别视频 {aweme_id} 的潜在客户")
+        logger.info(min_score, max_score)
 
         result = await customer_agent.get_potential_customers(
             aweme_id,
             batch_size,
+            customer_count,
+            concurrency,
             min_score,
-            max_score
+            max_score,
+            ins_filter,
+            twitter_filter,
+            region_filter
         )
-
         processing_time = time.time() - start_time
 
         return create_response(
@@ -244,7 +260,7 @@ async def identify_potential_customers(
 
 
 @router.post(
-    "/fetch_keyword_potential_customers",
+    "/get_keyword_potential_customers",
     summary="【关键词搜索】高效挖掘细分赛道潜在买家",
     description="""
 用途:
@@ -256,6 +272,7 @@ async def identify_potential_customers(
 参数:
   * keyword: 搜索关键词
   * batch_size: 每批处理评论数量，默认30
+* customer_count: 最大返回客户数量，默认100
   * video_concurrency: 视频处理并发数，默认5
   * ai_concurrency: AI处理并发数，默认5
   * min_score: 最小购买意向分数，范围0-100，默认50
@@ -263,16 +280,16 @@ async def identify_potential_customers(
   * ins_filter: 是否过滤Instagram为空的用户，默认False
   * twitter_filter: 是否过滤Twitter为空的用户，默认False
   * region_filter: 按地区过滤用户，默认不过滤
-  * max_customers: 最大返回客户数量，默认不限制
 
 （让流量精准变现，从海量视频中锁定目标客户！）
 """,
     response_model_exclude_none=True,
 )
-async def identify_keyword_potential_customers(
+async def get_keyword_potential_customers(
         request: Request,
         keyword: str = Query(..., description="搜索关键词"),
         batch_size: int = Query(30, description="每批处理评论数量"),
+        customer_count: int = Query(100, description="最大返回客户数量"),
         video_concurrency: int = Query(5, description="视频处理并发数"),
         ai_concurrency: int = Query(5, description="AI处理并发数"),
         min_score: float = Query(50.0, description="最小购买意向分数，范围0-100"),
@@ -280,7 +297,6 @@ async def identify_keyword_potential_customers(
         ins_filter: bool = Query(False, description="是否过滤Instagram为空的用户"),
         twitter_filter: bool = Query(False, description="是否过滤Twitter为空的用户"),
         region_filter: Optional[str] = Query(None, description="按地区过滤用户"),
-        max_customers: Optional[int] = Query(None, description="最大返回客户数量"),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """
@@ -307,6 +323,7 @@ async def identify_keyword_potential_customers(
         result = await customer_agent.get_keyword_potential_customers(
             keyword=keyword,
             batch_size=batch_size,
+            customer_count=customer_count,
             video_concurrency=video_concurrency,
             ai_concurrency=ai_concurrency,
             min_score=min_score,
@@ -314,7 +331,6 @@ async def identify_keyword_potential_customers(
             ins_filter=ins_filter,
             twitter_filter=twitter_filter,
             region_filter=region_filter,
-            max_customers=max_customers
         )
 
         processing_time = time.time() - start_time
