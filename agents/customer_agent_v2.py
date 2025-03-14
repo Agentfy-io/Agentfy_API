@@ -7,10 +7,10 @@
 
 import json
 import re
+import time
+import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
-import asyncio
-import time
 
 import numpy as np
 import pandas as pd
@@ -24,8 +24,8 @@ from services.ai_models.claude import Claude
 from services.cleaner.comment_cleaner import CommentCleaner
 from services.cleaner.video_cleaner import VideoCleaner
 from services.crawler.comment_crawler import CommentCollector
-from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 from services.crawler.video_crawler import VideoCollector
+from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 
 # 设置日志记录器
 logger = setup_logger(__name__)
@@ -50,6 +50,7 @@ class CustomerAgent:
         self.chatgpt = ChatGPT()
         self.claude = Claude()
 
+        # 初始化收集器和清洁器
         self.comment_collector = CommentCollector(tikhub_api_key, settings.TIKHUB_BASE_URL)
         self.comment_cleaner = CommentCleaner()
 
@@ -95,6 +96,7 @@ class CustomerAgent:
             - Positive reactions to product features
             - Any positive sentiment to the influencer herself/himself is consider neutral
             - Any engagement indicating potential future purchase""",
+
             'customer_reply': """# # Multilingual Customer Service AI Assistant
 
             ## System Instruction
@@ -152,6 +154,7 @@ class CustomerAgent:
               "confidence_score": 0.95
             }
             """,
+
             'batch_customer_reply': """## Multilingual Batch Customer Service AI Assistant
 ### System Instruction
 You are an advanced multilingual customer service AI for an e-commerce platform. Your task is to process multiple customer messages simultaneously and generate appropriate responses for each.
@@ -251,15 +254,21 @@ This format ensures efficient multilingual customer support while maintaining hi
             }
         }
 
-    async def fetch_video_comments(self, aweme_id: str, ins_filter: bool = False, twitter_filter: bool = False, region_filter: Optional[str] = None) -> Dict[str, Any]:
+    async def fetch_video_comments(
+            self,
+            aweme_id: str,
+            ins_filter: bool = False,
+            twitter_filter: bool = False,
+            region_filter: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         获取指定视频的清理后的评论数据
 
         Args:
-            aweme_id (str): 视频ID
-            ins_filter (bool): 是否过滤Instagram为None的评论
-            twitter_filter (bool): 是否过滤Twitter为None的评论
-            region_filter (str): 评论区域过滤器，例如"US"，"GB"等
+            aweme_id: 视频ID
+            ins_filter: 是否过滤Instagram为None的评论
+            twitter_filter: 是否过滤Twitter为None的评论
+            region_filter: 评论区域过滤器，例如"US"，"GB"等
 
         Returns:
             Dict[str, Any]: 清理后的评论数据，包含视频ID和评论列表
@@ -271,6 +280,7 @@ This format ensures efficient multilingual customer support while maintaining hi
         start_time = time.time()
 
         try:
+            # 验证输入参数
             if not aweme_id or not isinstance(aweme_id, str):
                 raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
@@ -280,6 +290,7 @@ This format ensures efficient multilingual customer support while maintaining hi
             # 获取评论
             comments = await self.comment_collector.collect_video_comments(aweme_id)
 
+            # 检查是否成功获取评论
             if not comments or not comments.get('comments'):
                 logger.warning(f"❌ 视频 {aweme_id} 未找到评论")
                 return {
@@ -293,18 +304,21 @@ This format ensures efficient multilingual customer support while maintaining hi
             cleaned_comments = await self.comment_cleaner.clean_video_comments(comments)
             cleaned_comments = cleaned_comments.get('comments', [])
 
+            # 转换为DataFrame便于处理
             comments_df = pd.DataFrame(cleaned_comments)
 
-            # 过滤条件
+            # 应用过滤条件
             if ins_filter:
-                comments_df = comments_df[comments_df['ins_id']!= '']
+                comments_df = comments_df[comments_df['ins_id'] != '']
             if twitter_filter:
-                comments_df = comments_df[comments_df['twitter_id']!= '']
+                comments_df = comments_df[comments_df['twitter_id'] != '']
             if region_filter:
                 comments_df = comments_df[comments_df['commenter_region'] == region_filter]
 
+            # 计算处理时间
             processing_time = time.time() - start_time
 
+            # 准备返回结果
             result = {
                 'aweme_id': aweme_id,
                 'comments': comments_df.to_dict(orient='records'),
@@ -328,7 +342,7 @@ This format ensures efficient multilingual customer support while maintaining hi
             self,
             aweme_id: str,
             batch_size: int = 30,
-            max_count: int = 100,
+            customer_count: int = 100,
             concurrency: int = 5,
             min_score: float = 50.0,
             max_score: float = 100.0,
@@ -339,13 +353,31 @@ This format ensures efficient multilingual customer support while maintaining hi
         """
         获取潜在客户列表
 
+        步骤:
         1. 调用fetch_video_comments方法获取视频评论
         2. 使用ins_filter，twitter_filter, region_filter 去过滤数据
         3. 使用AI模型分析符合条件评论，识别潜在客户
         4. 返回潜在客户列表
+
+        Args:
+            aweme_id: 视频ID
+            batch_size: 每批处理的评论数量
+            customer_count: 最大潜在客户数量
+            concurrency: AI分析的并发数
+            min_score: 最小参与度分数
+            max_score: 最大参与度分数
+            ins_filter: 是否过滤Instagram为None的评论
+            twitter_filter: 是否过滤Twitter为None的评论
+            region_filter: 评论区域过滤器
+
+        Returns:
+            Dict[str, Any]: 潜在客户信息
+
+        Raises:
+            ValidationError: 当aweme_id为空或无效时
+            ExternalAPIError: 当网络连接失败时
+            InternalServerError: 当出现内部处理错误时
         """
-
-
         start_time = time.time()
         potential_customers = []  # 潜在客户列表
 
@@ -420,13 +452,13 @@ This format ensures efficient multilingual customer support while maintaining hi
                                         f"分析后 {len(merged_batch)}，过滤后 {len(filtered_batch)}")
 
                             # 如果客户总数超过最大限制，则只添加到最大限制
-                            if self.customer_count > max_count:
+                            if self.customer_count > customer_count:
                                 potential_customers.extend(
-                                    filtered_batch.head(max_count - self.customer_count).to_dict('records'))
+                                    filtered_batch.head(customer_count - self.customer_count).to_dict('records'))
                                 self.comment_collector.status = False  # 停止收集评论
                                 self.comment_cleaner.status = False  # 停止清洗评论
                                 logger.info(
-                                    f"现在已经有 {self.customer_count} 个潜在客户，达到最大限制 {max_count}，停止处理")
+                                    f"现在已经有 {self.customer_count} 个潜在客户，达到最大限制 {customer_count}，停止处理")
                                 break
 
                             # 添加到潜在客户列表
@@ -437,11 +469,12 @@ This format ensures efficient multilingual customer support while maintaining hi
                             potential_customers = batch.to_dict('records')
 
                 # 如果客户总数超过最大限制，则停止处理
-                if self.customer_count > max_count:
+                if self.customer_count > customer_count:
                     self.comment_collector.status = False  # 停止收集评论
                     self.comment_cleaner.status = False  # 停止清洗评论
                     break
 
+            # 计算处理时间并返回结果
             processing_time = time.time() - start_time
             logger.info(
                 f"✅ 分析完成，成功处理 {len(comments)} 条评论，客户总数: {len(potential_customers)}，耗时: {processing_time:.2f}秒")
@@ -476,17 +509,22 @@ This format ensures efficient multilingual customer support while maintaining hi
         """
         根据关键词获取潜在客户
 
+        步骤:
+        1. 获取与关键词相关的视频
+        2. 对每个视频调用get_potential_customers方法获取潜在客户
+        3. 合并结果并过滤排序
+
         Args:
-            keyword (str): 关键词
-            batch_size (int, optional): 每批处理的评论数量，默认30
-            customer_count (int, optional): 最大潜在客户数量，默认100
-            video_concurrency (int, optional): 视频处理并发数，默认5
-            ai_concurrency (int, optional): ai处理并发数，默认5
-            min_score (float, optional): 最小参与度分数，默认50.0
-            max_score (float, optional): 最大参与度分数，默认100.0
-            ins_filter (bool, optional): 是否过滤Instagram为空用户，默认False
-            twitter_filter (bool, optional): 是否过滤Twitter为空用户，默认False
-            region_filter (str, optional): 地区过滤，默认None
+            keyword: 关键词
+            batch_size: 每批处理的评论数量
+            customer_count: 最大潜在客户数量
+            video_concurrency: 视频处理并发数
+            ai_concurrency: ai处理并发数
+            min_score: 最小参与度分数
+            max_score: 最大参与度分数
+            ins_filter: 是否过滤Instagram为空用户
+            twitter_filter: 是否过滤Twitter为空用户
+            region_filter: 地区过滤
 
         Returns:
             Dict[str, Any]: 潜在客户信息
@@ -499,6 +537,7 @@ This format ensures efficient multilingual customer support while maintaining hi
         potential_customers = []  # 潜在客户列表
 
         try:
+            # 验证输入参数
             if not keyword or not isinstance(keyword, str):
                 raise ValueError("无效的关键词")
 
@@ -508,9 +547,11 @@ This format ensures efficient multilingual customer support while maintaining hi
             raw_videos = await video_collector.collect_videos_by_keyword(keyword)
             cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
 
+            # 提取视频ID列表
             videos_df = pd.DataFrame(cleaned_videos['videos'])
             aweme_ids = videos_df['aweme_id'].tolist()
 
+            # 检查是否找到相关视频
             if not aweme_ids:
                 logger.warning(f"未找到与关键词 {keyword} 相关的视频")
                 return {
@@ -524,13 +565,18 @@ This format ensures efficient multilingual customer support while maintaining hi
 
             # 按照视频并发数处理视频
             for i in range(0, len(aweme_ids), video_concurrency):
-                if self.customer_count >= customer_count: # 如果已经达到最大潜在客户数量，停止处理
+                # 如果已经达到最大潜在客户数量，停止处理
+                if self.customer_count >= customer_count:
                     self.comment_collector.status = False  # 停止收集评论
                     self.comment_cleaner.status = False  # 停止清洗评论
                     logger.info(f"已经达到最大潜在客户数量 {customer_count}，停止处理")
                     break
+
+                # 获取当前批次的视频ID
                 batch_aweme_ids = aweme_ids[i:i + video_concurrency]
                 logger.info(f"处理视频批次 {i + 1} 至 {i + len(batch_aweme_ids)}")
+
+                # 为每个视频创建任务
                 tasks = [
                     self.get_potential_customers(
                         aweme_id,
@@ -547,13 +593,13 @@ This format ensures efficient multilingual customer support while maintaining hi
                 ]
                 batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
+                # 处理每个视频的结果
                 for j, result in enumerate(batch_results):
                     if isinstance(result, Exception) or not result:
                         logger.error(f"视频 {aweme_ids[i + j]} 处理失败/停止处理: {str(result)}")
                     else:
                         potential_customers.extend(result.get('potential_customers', []))
                         logger.info(f"视频 {aweme_ids[i + j]} 处理完成")
-
 
             # 根据潜在价值过滤和排序
             potential_customers_df = pd.DataFrame(potential_customers)
@@ -564,6 +610,7 @@ This format ensures efficient multilingual customer support while maintaining hi
             # 计算平均潜在价值
             avg_value = filtered_df['engagement_score'].mean() if not filtered_df.empty else 0
 
+            # 计算处理时间并返回结果
             processing_time = time.time() - start_time
             return {
                 'keyword': keyword,
@@ -585,7 +632,6 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.error(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
             raise RuntimeError(f"获取关键词潜在客户时发生未预期错误: {str(e)}")
 
-
     async def _analyze_aspect(
             self,
             aspect_type: str,
@@ -594,10 +640,15 @@ This format ensures efficient multilingual customer support while maintaining hi
         """
         通用分析方法，根据不同的分析类型调用ChatGPT或Claude AI模型。
 
+        步骤:
+        1. 验证分析类型是否支持
+        2. 构造分析提示
+        3. 调用AI模型进行分析
+        4. 解析并返回分析结果
+
         Args:
-            aspect_type (str): 需要分析的类型 (purchase_intent)
-            max_count (int): 最大分析数量
-            comment_data (List[Dict[str, Any]]): 需要分析的评论列表
+            aspect_type: 需要分析的类型 (purchase_intent)
+            comment_data: 需要分析的评论列表
 
         Returns:
             Optional[List[Dict[str, Any]]]: AI返回的分析结果，失败时抛出异常
@@ -607,9 +658,11 @@ This format ensures efficient multilingual customer support while maintaining hi
             ExternalAPIError: 当调用AI服务时出错
         """
         try:
+            # 验证分析类型是否支持
             if aspect_type not in self.analysis_types:
                 raise ValidationError(detail=f"不支持的分析类型: {aspect_type}", field="aspect_type")
 
+            # 检查评论数据是否为空
             if not comment_data:
                 logger.warning("评论数据为空，跳过分析")
                 return []
@@ -627,7 +680,7 @@ This format ensures efficient multilingual customer support while maintaining hi
                 if 'text' in comment and len(comment['text']) > 1000:
                     comment['text'] = comment['text'][:997] + "..."
 
-            # 调用AI进行分析，优先使用ChatGPT，失败时尝试Claude
+            # 尝试使用ChatGPT进行分析
             try:
                 response = await self.chatgpt.chat(
                     system_prompt=sys_prompt,
@@ -638,9 +691,9 @@ This format ensures efficient multilingual customer support while maintaining hi
                 analysis_results = response["choices"][0]["message"]["content"].strip()
 
             except ExternalAPIError as e:
+                # ChatGPT失败时尝试使用Claude作为备份
                 logger.warning(f"ChatGPT分析失败，尝试使用Claude: {str(e)}")
                 try:
-                    # 尝试使用Claude作为备份
                     response = await self.claude.chat(
                         system_prompt=sys_prompt,
                         user_prompt=user_prompt
@@ -770,3 +823,5 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 
+if __name__ == "__main__":
+    asyncio.run(main())
