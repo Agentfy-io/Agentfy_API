@@ -43,10 +43,9 @@ class CustomerAgent:
 
         Args:
             tikhub_api_key: TikHub API密钥
-            tikhub_base_url: TikHub API基础URL
         """
-
         self.customer_count = 0
+
         # 初始化AI模型客户端
         self.chatgpt = ChatGPT()
         self.claude = Claude()

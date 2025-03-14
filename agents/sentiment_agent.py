@@ -38,7 +38,7 @@ load_dotenv()
 class SentimentAgent:
     """处理TikTok评论的代理类，提供评论获取、舆情分析和黑粉识别功能"""
 
-    def __init__(self, tikhub_api_key: Optional[str] = None, tikhub_base_url: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None):
         """
         初始化SentimentAgent，加载API密钥和提示模板
 
@@ -52,7 +52,7 @@ class SentimentAgent:
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
-        self.tikhub_base_url = tikhub_base_url
+        self.tikhub_base_url = settings.TIKHUB_BASE_URL
 
         # 如果没有提供TikHub API密钥，记录警告
         if not self.tikhub_api_key:

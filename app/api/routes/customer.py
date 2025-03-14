@@ -41,7 +41,7 @@ router = APIRouter(prefix="/customers")
 # 依赖项：获取CustomerAgent实例
 async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
     """使用验证后的TikHub API Key创建CustomerAgent实例"""
-    return CustomerAgent(tikhub_api_key=tikhub_api_key, tikhub_base_url=settings.TIKHUB_BASE_URL)
+    return CustomerAgent(tikhub_api_key=tikhub_api_key)
 
 
 @router.post(

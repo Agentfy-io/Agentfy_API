@@ -32,7 +32,7 @@ router = APIRouter(prefix="/video")
 # 依赖项：获取VideoAgent实例
 async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
     """使用验证后的TikHub API Key创建VideoAgent实例"""
-    return VideoAgent(tikhub_api_key=tikhub_api_key, tikhub_base_url=settings.TIKHUB_BASE_URL)
+    return VideoAgent(tikhub_api_key=tikhub_api_key)
 
 
 @router.post(

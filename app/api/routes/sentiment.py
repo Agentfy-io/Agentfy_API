@@ -32,7 +32,7 @@ router = APIRouter(prefix="/sentiment")
 # 依赖项：获取SentimentAgent实例
 async def get_sentiment_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
     """使用验证后的TikHub API Key创建SentimentAgent实例"""
-    return SentimentAgent(tikhub_api_key=tikhub_api_key, tikhub_base_url=settings.TIKHUB_BASE_URL)
+    return SentimentAgent(tikhub_api_key=tikhub_api_key)
 
 
 @router.post(

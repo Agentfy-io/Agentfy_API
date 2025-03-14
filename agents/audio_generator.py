@@ -38,7 +38,7 @@ class AudioGeneratorAgent:
     为创作者生成音频文件的代理类，提供文本到语音转换功能，支持多种语言和声音效果
     """
 
-    def __init__(self, tikhub_api_key: Optional[str] = None, tikhub_base_url: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None):
         """
         初始化音频生成代理类
 
@@ -54,7 +54,7 @@ class AudioGeneratorAgent:
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
-        self.tikhub_base_url = tikhub_base_url
+        self.tikhub_base_url = settings.TIKHUB_BASE_URL
 
         # 如果没有提供TikHub API密钥，记录警告
         if not self.tikhub_api_key:

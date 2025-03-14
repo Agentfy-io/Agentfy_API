@@ -42,7 +42,7 @@ load_dotenv()
 class VideoAgent:
     """视频全方位分析器，用于分析TikTok视频数据并生成综合报告。"""
 
-    def __init__(self, tikhub_api_key: Optional[str] = None, tikhub_base_url: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None):
         """
         初始化VideoAgent。
 
@@ -56,7 +56,7 @@ class VideoAgent:
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
-        self.tikhub_base_url = tikhub_base_url
+        self.tikhub_base_url = settings.TIKHUB_BASE_URL
 
         # 如果没有提供TikHub API密钥，记录警告
         if not self.tikhub_api_key:
