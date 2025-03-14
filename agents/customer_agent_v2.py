@@ -559,11 +559,11 @@ This format ensures efficient multilingual customer support while maintaining hi
             # 根据潜在价值过滤和排序
             potential_customers_df = pd.DataFrame(potential_customers)
             filtered_df = potential_customers_df[
-                potential_customers_df['potential_value'].between(min_score, max_score)
-            ].sort_values(by='potential_value', ascending=False)
+                potential_customers_df['engagement_score'].between(min_score, max_score)
+            ].sort_values(by='engagement_score', ascending=False)
 
             # 计算平均潜在价值
-            avg_value = filtered_df['potential_value'].mean() if not filtered_df.empty else 0
+            avg_value = filtered_df['engagement_score'].mean() if not filtered_df.empty else 0
 
             processing_time = time.time() - start_time
             return {
