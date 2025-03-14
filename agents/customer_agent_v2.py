@@ -51,6 +51,9 @@ class CustomerAgent:
         self.chatgpt = ChatGPT()
         self.claude = Claude()
 
+        self.comment_collector = CommentCollector(tikhub_api_key, settings.TIKHUB_BASE_URL)
+        self.comment_cleaner = CommentCleaner()
+
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
         self.tikhub_base_url = settings.TIKHUB_BASE_URL
@@ -276,8 +279,7 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.info(f"🔍 开始获取视频 {aweme_id} 的评论")
 
             # 获取评论
-            comment_collector = CommentCollector(self.tikhub_api_key, self.tikhub_base_url)
-            comments = await comment_collector.collect_video_comments(aweme_id)
+            comments = await self.comment_collector.collect_video_comments(aweme_id)
 
             if not comments or not comments.get('comments'):
                 logger.warning(f"❌ 视频 {aweme_id} 未找到评论")
@@ -289,8 +291,7 @@ This format ensures efficient multilingual customer support while maintaining hi
                 }
 
             # 清洗评论
-            comment_cleaner = CommentCleaner()
-            cleaned_comments = await comment_cleaner.clean_video_comments(comments)
+            cleaned_comments = await self.comment_cleaner.clean_video_comments(comments)
             cleaned_comments = cleaned_comments.get('comments', [])
 
             comments_df = pd.DataFrame(cleaned_comments)
@@ -345,8 +346,10 @@ This format ensures efficient multilingual customer support while maintaining hi
         4. 返回潜在客户列表
         """
 
+
         start_time = time.time()
         potential_customers = []  # 潜在客户列表
+
         try:
             # 获取评论数据，并且过滤+清洗
             comments_data = await self.fetch_video_comments(aweme_id, ins_filter, twitter_filter, region_filter)
@@ -421,7 +424,10 @@ This format ensures efficient multilingual customer support while maintaining hi
                             if self.customer_count > max_count:
                                 potential_customers.extend(
                                     filtered_batch.head(max_count - self.customer_count).to_dict('records'))
-                                logger.info(f"现在已经有 {self.customer_count} 个潜在客户，达到最大限制 {max_count}，停止处理")
+                                self.comment_collector.status = False  # 停止收集评论
+                                self.comment_cleaner.status = False  # 停止清洗评论
+                                logger.info(
+                                    f"现在已经有 {self.customer_count} 个潜在客户，达到最大限制 {max_count}，停止处理")
                                 break
 
                             # 添加到潜在客户列表
@@ -433,6 +439,8 @@ This format ensures efficient multilingual customer support while maintaining hi
 
                 # 如果客户总数超过最大限制，则停止处理
                 if self.customer_count > max_count:
+                    self.comment_collector.status = False  # 停止收集评论
+                    self.comment_cleaner.status = False  # 停止清洗评论
                     break
 
             processing_time = time.time() - start_time
@@ -452,7 +460,6 @@ This format ensures efficient multilingual customer support while maintaining hi
         except Exception as e:
             logger.error(f"获取潜在客户时发生未预期错误: {str(e)}")
             raise InternalServerError(detail=f"获取潜在客户时发生未预期错误: {str(e)}")
-
 
     async def get_keyword_potential_customers(
             self,
@@ -519,6 +526,8 @@ This format ensures efficient multilingual customer support while maintaining hi
             # 按照视频并发数处理视频
             for i in range(0, len(aweme_ids), video_concurrency):
                 if self.customer_count >= customer_count: # 如果已经达到最大潜在客户数量，停止处理
+                    self.comment_collector.status = False  # 停止收集评论
+                    self.comment_cleaner.status = False  # 停止清洗评论
                     logger.info(f"已经达到最大潜在客户数量 {customer_count}，停止处理")
                     break
                 batch_aweme_ids = aweme_ids[i:i + video_concurrency]
@@ -757,7 +766,7 @@ This format ensures efficient multilingual customer support while maintaining hi
 async def main():
     agent = CustomerAgent()
     # 获取潜在客户
-    result = await agent.get_keyword_potential_customers("iphone 13", customer_count=50, min_score=0, max_score=100)
+    result = await agent.get_keyword_potential_customers("iphone 13", customer_count=400, min_score=50, max_score=100)
 
 if __name__ == "__main__":
     asyncio.run(main())

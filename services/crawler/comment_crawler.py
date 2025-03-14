@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, AsyncGenerator
 import aiohttp
 import os
 from dotenv import load_dotenv
@@ -27,6 +27,7 @@ class CommentCollector:
             api_key: TikHub API密钥，如果不提供则使用环境变量中的默认值
             base_url: TikHub API基础URL，如果不提供则使用环境变量中的默认值
         """
+        self.status = True
         self.api_key = api_key or settings.TIKHUB_API_KEY
         self.base_url = base_url or settings.TIKHUB_BASE_URL
 
@@ -170,7 +171,7 @@ class CommentCollector:
 
         try:
             async with aiohttp.ClientSession() as session:
-                while has_more:
+                while has_more and self.status:
                     data = await self.fetch_comments(aweme_id, cursor, session)
 
                     if not data:
