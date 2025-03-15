@@ -33,7 +33,6 @@ class VideoCleaner:
 
         try:
             logger.info(f"清洗视频 {aweme_id}")
-            video_data = video_data.get('video', {})
 
             # 处理标签列表
             cha_list = video_data.get('cha_list', [])
@@ -115,7 +114,7 @@ class VideoCleaner:
                 'duration': self._parse_int(video_info.get('duration', 0)),
                 'allow_download': video_info.get('allow_download', False),
             }
-
+            logger.info(f"成功清洗视频 {aweme_id}")
             return {
                 'aweme_id': aweme_id,
                 'video': cleaned_video,
