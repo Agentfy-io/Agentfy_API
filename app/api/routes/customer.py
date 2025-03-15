@@ -287,7 +287,7 @@ async def get_keyword_potential_customers(
         customer_count: int = Query(100, description="最大返回客户数量"),
         video_concurrency: int = Query(5, description="视频处理并发数"),
         ai_concurrency: int = Query(5, description="AI处理并发数"),
-        min_score: float = Query(50.0, description="最小购买意向分数，范围0-100"),
+        min_score: float = Query(0.0, description="最小购买意向分数，范围0-100"),
         max_score: float = Query(100.0, description="最大购买意向分数，范围1-100"),
         ins_filter: bool = Query(False, description="是否过滤Instagram为空的用户"),
         twitter_filter: bool = Query(False, description="是否过滤Twitter为空的用户"),
