@@ -97,6 +97,7 @@ class SentimentAgent:
                 
                 Respond with a JSON array containing analysis for all comments.
                 """,
+
             'relationship': """You are an AI trained to analyze audience sentiment and engagement toward an influencer or creator. Your task is to assess how commenters perceive and interact with the influencer.
                 For each comment, analyze:
                 1. **Trust Level:** (loyal fan, skeptical, indifferent)
@@ -126,6 +127,7 @@ class SentimentAgent:
                 
                 Respond with a JSON array containing the analysis for all comments.
                 """,
+
             'toxicity': """You are an AI trained to analyze social media comments for harmful, inappropriate,negative_product_review, negative_service_review, negative_shop_review or spam content. Your task is to detect and categorize toxicity levels in the provided comments.
                 For each comment, analyze:
                 1. **Toxicity Level:** (low, medium, high)
@@ -155,7 +157,44 @@ class SentimentAgent:
                 - emojis are not consider as spam.
         
                 Respond with a JSON array containing the analysis for all comments.
-                """
+                """,
+
+            'relationship_report': """You are a social media analytics expert specializing in influencer-audience relationships. Your task is to create an engaging report analyzing comment data to reveal audience connection patterns and community dynamics.
+                Report Sections:
+                1. Report Metadata (video ID, total comments, analysis timestamp)
+                2. Community Insight Summary (2-3 sentences highlighting key relationship patterns found in the data)
+                3. Audience Connection Analysis (analyze specific ways commenters relate to the creator - personal stories shared, questions asked, consistent engagement patterns)
+                4. Trust & Loyalty Indicators (markdown table showing metrics like returning commenters, defense of creator, personal disclosure levels)
+                5. Engagement Quality Assessment (analyze depth of comments, conversation threads, and emotional investment)
+                6. Audience Segmentation (identify distinct audience groups based on comment patterns and how they relate to the creator)
+                7. Relationship Growth Opportunities (2-3 specific, data-backed suggestions to strengthen audience bonds)
+                
+                Focus on revealing relationship patterns from the input data rather than generic advice. Identify how the audience perceives their relationship with the creator, what connection points resonate most, and where deeper engagement opportunities exist. Keep the report under 500 words.""",
+
+            'sentiment_report': """You are a content performance analyst specializing in audience emotional responses. Your task is to create an insightful report analyzing comment data to reveal how content emotionally resonates with the audience.
+                Report Sections:
+                1. Report Metadata (video ID, total comments, analysis timestamp)
+                2. Emotional Response Overview (2-3 sentences summarizing the dominant emotional patterns found in comments)
+                3. Sentiment Analysis (markdown table showing positive/negative/neutral distribution with specific emotion subcategories)
+                4. Emotional Triggers (analyze which specific content elements/moments generated the strongest emotional responses)
+                5. Audience Reaction Patterns (identify how emotions spread or change through comment threads)
+                6. Sentiment by Audience Segment (how different viewer groups emotionally responded)
+                7. Content Resonance Insights (which emotional appeals were most effective)
+                8. Strategic Recommendations (2-3 actionable ways to enhance positive emotional engagement based on the data)
+                
+                Focus on extracting emotional patterns directly from the input data. Analyze the specific language, expressions, and reactions that reveal audience emotional states and how they connect to content elements. Keep the report under 450 words.""",
+
+            'toxicity_report': """You are an expert content moderator and community safety analyst. Your task is to create a clear, concise report analyzing comment data to reveal community health and safety concerns.
+                Report Sections:
+                1. Report Metadata (video ID, total comments, analysis timestamp)
+                2. Safety Assessment Summary (2-3 sentences highlighting the overall community health based on toxicity metrics)
+                3. Toxicity Analysis (markdown table showing types and levels of problematic content identified)
+                4. Context Pattern Analysis (analyze when/where toxicity appears - specific topics, timestamps, or triggers)
+                5. Impact Assessment (analyze how toxic comments affect overall engagement and community interaction)
+                6. Moderation Priority Areas (identify specific types of concerning content requiring attention)
+                7. Community Management Recommendations (2-3 actionable, data-backed strategies to improve community health)
+                
+                Focus on presenting objective analysis from the input data rather than subjective judgments. Distinguish between genuine community concerns and minor issues. Provide balanced perspective that helps creators understand real community health without overemphasizing isolated incidents. Keep the report under 400 words."""
         }
 
     def _load_user_prompts(self) -> None:
@@ -169,8 +208,121 @@ class SentimentAgent:
             },
             'toxicity': {
                 'description': "toxicity, spam analysis",
-            }
+            },
+
         }
+
+    async def generate_analysis_report(self, aweme_id: str, analysis_type: str, data: Dict[str, Any]) -> str:
+        """
+        生成报告并转换为HTML
+
+        Args:
+            aweme_id (str): 视频 ID
+            analysis_type (str): 分析类型
+            data (Dict[str, Any]): 分析数据
+
+        Returns:
+            str: HTML报告的本地文件URL
+        """
+        if analysis_type not in self.system_prompts:
+            raise ValueError(f"Invalid report type: {analysis_type}. Choose from {self.system_prompts.keys()}")
+
+        # 获取系统提示
+        sys_prompt = self.system_prompts[analysis_type]
+
+        # 获取用户提示
+        user_prompt = f"Generate a report for the {analysis_type} analysis based on the following data:\n{json.dumps(data, ensure_ascii=False)}, for video ID: {aweme_id}"
+
+        # 生成报告
+        response = await self.chatgpt.chat(
+            system_prompt=sys_prompt,
+            user_prompt=user_prompt
+        )
+
+        report = response["choices"][0]["message"]["content"].strip()
+
+        # 保存Markdown报告
+        report_dir = "reports"
+        os.makedirs(report_dir, exist_ok=True)
+
+        report_md_path = os.path.join(report_dir, f"report_{aweme_id}.md")
+        with open(report_md_path, "w", encoding="utf-8") as f:
+            f.write(report)
+
+        # 转换为HTML
+        html_content = self.convert_markdown_to_html(report, f"{analysis_type.title()} Analysis for {aweme_id}")
+        html_filename = f"report_{aweme_id}.html"
+        html_path = os.path.join(report_dir, html_filename)
+
+        with open(html_path, 'w', encoding='utf-8') as f:
+            f.write(html_content)
+
+        # 生成本地文件URL
+        absolute_path = os.path.abspath(html_path)
+
+        # 构建file://协议URL
+        file_url = f"file://{absolute_path}"
+
+        # 确保路径分隔符是URL兼容的
+        if os.name == 'nt':  # Windows系统
+            # Windows路径需要转换为URL格式
+            file_url = file_url.replace('\\', '/')
+
+        print(f"报告已生成: Markdown ({report_md_path}), HTML ({html_path})")
+        print(f"报告本地URL: {file_url}")
+
+        return file_url
+
+    def convert_markdown_to_html(self, markdown_content: str, title: str = "Analysis Report") -> str:
+        """
+        将Markdown内容转换为HTML
+
+        Args:
+            markdown_content (str): Markdown内容
+            title (str): HTML页面标题
+
+        Returns:
+            str: HTML内容
+        """
+        try:
+            import markdown
+        except ImportError:
+            print("请安装markdown库: pip install markdown")
+            return f"<pre>{markdown_content}</pre>"
+
+        # 转换Markdown为HTML
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=['tables', 'fenced_code', 'codehilite', 'toc']
+        )
+
+        # 创建完整HTML文档
+        css = """
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1, h2, h3 { margin-top: 1.5em; color: #111; }
+        pre { background-color: #f6f8fa; border-radius: 3px; padding: 16px; overflow: auto; }
+        code { font-family: SFMono-Regular, Consolas, Menlo, monospace; background-color: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f6f8fa; }
+        """
+
+        html_document = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title}</title>
+        <style>{css}</style>
+    </head>
+    <body>
+        <h1>{title}</h1>
+        {html_content}
+    </body>
+    </html>
+        """
+
+        return html_document
 
     async def fetch_video_comments(self, aweme_id: str) -> Dict[str, Any]:
         """
@@ -529,6 +681,9 @@ class SentimentAgent:
                 }
             }
 
+            report_url = await self.generate_analysis_report(aweme_id, 'sentiment_report', analysis_summary)
+            analysis_summary['report_url'] = report_url
+
             return analysis_summary
         except (ValidationError, ExternalAPIError, InternalServerError) as e:
             # 直接向上传递这些已处理的错误
@@ -697,6 +852,8 @@ class SentimentAgent:
             if analyzed_df.empty:
                 raise InternalServerError("未获得有效的关系分析结果")
 
+            print(analyzed_df)
+
             analysis_summary = {
                 'trust_analysis': self.analyze_trust_metrics(analyzed_df),
                 'tone_analysis': self.analyze_audience_tone(analyzed_df),
@@ -710,6 +867,9 @@ class SentimentAgent:
                     'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
             }
+
+            report_url = await self.generate_analysis_report(aweme_id,'relationship_report',analysis_summary)
+            analysis_summary['report_url'] = report_url
 
             return analysis_summary
         except (ValidationError, ExternalAPIError, InternalServerError) as e:
@@ -1074,6 +1234,9 @@ class SentimentAgent:
                     'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
             }
+
+            report_url = await self.generate_analysis_report(aweme_id,'toxicity_report',analysis_summary)
+            analysis_summary['report_url'] = report_url
 
             return analysis_summary
         except (ValidationError, ExternalAPIError, InternalServerError) as e:
