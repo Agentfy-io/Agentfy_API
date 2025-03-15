@@ -1101,11 +1101,11 @@ class SentimentAgent:
                 raise InternalServerError("未获得有效的关系分析结果")
 
             analysis_summary = {
-                'loyal_fans_info': self.fetch_loyal_fans_info(analyzed_df),
-                'superfans_info': self.fetch_superfans_info(analyzed_df),
-                'new_followers_info': self.fetch_new_followers_info(analyzed_df),
-                'returning_audience_info': self.fetch_returning_audience_info(analyzed_df),
-                'long_time_fans_info': self.fetch_long_time_fans_info(analyzed_df),
+                'loyal_fans_info': self.extract_fan_group(analyzed_df, 'trust_level', 'loyal_fan', 'loyal_fans'),
+                'superfans_info': self.extract_fan_group(analyzed_df, 'fandom_level', 'superfan', 'superfans'),
+                'new_followers_info': self.extract_fan_group(analyzed_df, 'previous_knowledge', 'new_follower', 'new_followers'),
+                'returning_audience_info': self.extract_fan_group(analyzed_df, 'previous_knowledge', 'returning_audience', 'returning_audience'),
+                'long_time_fans_info': self.extract_fan_group(analyzed_df, 'previous_knowledge', 'long_time_fan', 'long_time_fans'),
                 'meta': {
                     'total_comments': len(analyzed_df),
                     'aweme_id': aweme_id,
@@ -1149,26 +1149,6 @@ class SentimentAgent:
             f'total_{group_name}': len(fan_group),
             f'{group_name}': fan_group.to_dict('records')
         }
-
-    def fetch_loyal_fans_info(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """获取忠实粉丝信息"""
-        return self.extract_fan_group(df, 'trust_level', 'loyal_fan', 'loyal_fans')
-
-    def fetch_superfans_info(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """获取超级粉丝信息"""
-        return self.extract_fan_group(df, 'fandom_level', 'superfan', 'superfans')
-
-    def fetch_new_followers_info(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """获取新关注者信息"""
-        return self.extract_fan_group(df, 'previous_knowledge', 'new_follower', 'new_followers')
-
-    def fetch_returning_audience_info(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """获取回头观众信息"""
-        return self.extract_fan_group(df, 'previous_knowledge', 'returning_audience', 'returning_audience')
-
-    def fetch_long_time_fans_info(self, df: pd.DataFrame) -> Dict[str, Any]:
-        """获取长期粉丝信息"""
-        return self.extract_fan_group(df, 'previous_knowledge', 'long_time_fan', 'long_time_fans')
 
     async def analyze_toxicity(self, aweme_id: str, batch_size: int = 30, concurrency: int = 5) -> Dict[str, Any]:
         """
