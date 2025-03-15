@@ -57,16 +57,19 @@ class OpenCV:
 
     async def analyze_video(self,
                             video_path: str,
-                            frame_interval: float = 2.0) -> List[Dict]:
+                            time_interval: float = 4.0) -> List[Dict]:
         """
         从视频中提取图像并生成描述性文本。
 
         Args:
             video_path: 视频文件路径
-            frame_interval: 分析帧之间的间隔（秒）
+            time_interval: 分析帧之间的时间间隔（秒）
 
         Returns:
-            分析结果
+            分析结果列表，每个元素包含：
+                - start_time: 该帧开始时间（秒）
+                - end_time:   下一帧开始前的时间（秒）
+                - description: 对帧内容的文字描述
         """
 
         print(f"Opening video: {video_path}")
@@ -78,43 +81,48 @@ class OpenCV:
         try:
             fps = video.get(cv2.CAP_PROP_FPS)
             total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-            frame_step = int(frame_interval * fps)
+            # 视频总时长（秒）
+            total_duration = total_frames / fps if fps > 0 else 0
 
-            print(f"Video info - FPS: {fps}, Total frames: {total_frames}")
+            print(f"Video info - FPS: {fps}, Total frames: {total_frames}, "
+                  f"Total duration: {total_duration:.2f}s")
 
             results = []
-            current_frame = 0
-            frames_processed = 0
 
-            while True:
-                if frame_step > 1:
-                    video.set(cv2.CAP_PROP_POS_FRAMES, current_frame)
+            current_time = 0.0
+            processed_count = 0  # 统计提取了多少帧
+            while current_time <= total_duration:
+                # 按时间戳跳转，而非用帧索引
+                video.set(cv2.CAP_PROP_POS_MSEC, current_time * 1000)
 
                 success, frame = video.read()
                 if not success:
+                    # 如果到达视频尾部或读取失败，则结束
                     break
 
                 try:
+                    # 这里是你对帧进行描述的处理
                     caption = await self._process_frame(frame)
 
-                    start_time = current_frame / fps
-                    end_time = (current_frame + frame_step) / fps
+                    start_time = current_time
+                    end_time = current_time + time_interval
 
                     result = {
-                        'start_time': round(start_time, 1),
-                        'end_time': round(end_time, 1),
+                        'start_time': round(start_time, 2),
+                        'end_time': round(end_time, 2),
                         'description': caption
                     }
                     results.append(result)
 
-                    frames_processed += 1
-                    progress = (current_frame / total_frames * 100) if total_frames > 0 else 0
-                    print(f"\rProcessed frames: {frames_processed}, Progress: {progress:.1f}%", end='')
+                    processed_count += 1
+                    progress = (current_time / total_duration * 100) if total_duration > 0 else 0
+                    print(f"\rProcessed frames: {processed_count}, Progress: {progress:.1f}%", end='')
 
                 except Exception as e:
-                    print(f"\nError processing frame {frames_processed}: {str(e)}")
+                    print(f"\nError processing at time {current_time:.2f}s: {str(e)}")
 
-                current_frame += frame_step
+                # 前进到下一个时间点
+                current_time += time_interval
 
             print("\nAnalysis complete!")
             return results
@@ -163,7 +171,7 @@ async def main():
         # Analyze video
         results = await opencv.analyze_video(
             "https://example.com/video.mp4",
-            frame_interval=2.0
+            time_interval=2.0
         )
 
         # Save results
