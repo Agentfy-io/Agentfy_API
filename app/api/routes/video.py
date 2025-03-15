@@ -212,7 +212,7 @@ async def fetch_video_transcript(
 
 参数:
   * aweme_id: TikTok视频ID
-  * frame_interval: 分析帧之间的间隔（秒）
+  * time_interval: 分析帧之间的间隔（秒）
 
 （图像识别省时省力，为视频精修与创意编排助力！）
 """,
@@ -221,7 +221,7 @@ async def fetch_video_transcript(
 async def analyze_video_frames(
         request: Request,
         aweme_id: str = Query(..., description="TikTok视频ID"),
-        frame_interval: float = Query(2.0, description="分析帧之间的间隔（秒）"),
+        time_interval: float = Query(2.0, description="分析帧之间的间隔（秒）"),
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
     """
@@ -236,7 +236,7 @@ async def analyze_video_frames(
     try:
         logger.info(f"分析视频帧")
 
-        video_frames = await video_agent.analyze_video_frames(aweme_id, frame_interval)
+        video_frames = await video_agent.analyze_video_frames(aweme_id, time_interval)
 
         processing_time = time.time() - start_time
 
@@ -271,7 +271,7 @@ async def analyze_video_frames(
 
 参数:
   * aweme_id: TikTok视频ID
-  * frame_interval: 分析帧之间的间隔（秒）
+  * time_interval: 分析帧之间的间隔（秒）
   * confidence_threshold: 文字识别置信度阈值
 
 （让视频画面中的所有文字无所遁形，彻底捕捉宣传与信息点！）
@@ -281,7 +281,7 @@ async def analyze_video_frames(
 async def fetch_invideo_text(
         request: Request,
         aweme_id: str = Query(..., description="TikTok视频ID"),
-        frame_interval: int = Query(90, description="分析帧之间的间隔（秒）"),
+        time_interval: int = Query(90, description="分析帧之间的间隔（秒）"),
         confidence_threshold: float = Query(0.6, description="文字识别置信度阈值"),
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
@@ -289,7 +289,7 @@ async def fetch_invideo_text(
     提取TikTok视频内文字
 
     - **aweme_id**: TikTok视频ID
-    - **frame_interval**: 分析帧之间的间隔（秒）
+    - **time_interval**: 分析帧之间的间隔（秒）
     - **confidence_threshold**: 文字识别置信度阈值
 
     返回视频内文字提取报告
@@ -299,7 +299,7 @@ async def fetch_invideo_text(
     try:
         logger.info(f"提取视频内文字")
 
-        invideo_text = await video_agent.fetch_invideo_text(aweme_id, frame_interval, confidence_threshold)
+        invideo_text = await video_agent.fetch_invideo_text(aweme_id, time_interval, confidence_threshold)
 
         processing_time = time.time() - start_time
 

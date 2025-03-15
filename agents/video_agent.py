@@ -198,8 +198,8 @@ class VideoAgent:
 
             logger.info(f"🔍 正在获取视频数据: {aweme_id}...")
 
-            video_crawler = VideoCollector(self.tikhub_api_key, self.tikhub_base_url)
-            video_data = await video_crawler.collect_single_video(aweme_id=aweme_id)
+            video_crawler = VideoCollector(self.tikhub_api_key)
+            video_data = await video_crawler.collect_single_video(aweme_id)
 
             if not video_data.get('video'):
                 logger.warning(f"❌ 未找到视频数据: {aweme_id}")
@@ -209,8 +209,8 @@ class VideoAgent:
                     'timestamp': datetime.now().isoformat()
                 }
             video_cleaner = VideoCleaner()
-            cleaned_video_data = await video_cleaner.clean_single_video(video_data=video_data)
-            cleaned_video_data = cleaned_video_data.get('video', {})
+            cleaned_video_data = await video_cleaner.clean_single_video(video_data['video'])
+            cleaned_video_data = cleaned_video_data['video']
 
             result = {
                 'aweme_id': aweme_id,
@@ -381,13 +381,13 @@ class VideoAgent:
             logger.error(f"❌ 分析视频文本转录时发生未预期错误: {str(e)}")
             raise InternalServerError(detail=f"分析视频文本转录时发生未预期错误: {str(e)}")
 
-    async def analyze_video_frames(self, aweme_id: str, frame_interval: float) -> Dict[str, Any]:
+    async def analyze_video_frames(self, aweme_id: str, time_interval: float) -> Dict[str, Any]:
         """
         分析视频帧内容
 
         Args:
             aweme_id (str): 视频ID
-            frame_interval (float): 分析帧的间隔
+            time_interval (float): 分析帧的间隔
 
         Returns:
             Dict[str, Any]: 分析结果
@@ -424,7 +424,7 @@ class VideoAgent:
 
             # 调用 AI 进行分析
             opencv = OpenCV()
-            video_script = await opencv.analyze_video(play_address, frame_interval)
+            video_script = await opencv.analyze_video(play_address, time_interval)
 
             return {
                 'aweme_id': aweme_id,
@@ -442,13 +442,13 @@ class VideoAgent:
             logger.error(f"❌ 分析视频帧内容时发生未预期错误: {str(e)}")
             raise InternalServerError(detail=f"分析视频帧内容时发生未预期错误: {str(e)}")
 
-    async def fetch_invideo_text(self, aweme_id: str, frame_interval: int = 90, confidence_threshold: float = 0.5) -> Dict[str, Any]:
+    async def fetch_invideo_text(self, aweme_id: str, time_interval: int = 3, confidence_threshold: float = 0.5) -> Dict[str, Any]:
         """
         分析视频中出现的文本内容
 
         Args:
             aweme_id (str): 视频ID
-            frame_interval (int): 分析帧的间隔
+            time_interval (int): 分析帧的间隔
             confidence_threshold (float): 文本识别的置信度阈值
 
         Returns:
@@ -487,7 +487,7 @@ class VideoAgent:
             # 调用 AI 进行分析
             video_ocr = VideoOCR()
             # 提取视频中的文本内容
-            texts = await video_ocr.analyze_video(play_address, frame_interval, confidence_threshold)
+            texts = await video_ocr.analyze_video(play_address, time_interval, confidence_threshold)
 
             return {
                 'aweme_id': aweme_id,
