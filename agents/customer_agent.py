@@ -457,7 +457,7 @@ class CustomerAgent:
     async def get_potential_customers(
             self,
             aweme_id: str,
-            batch_size: int = 30,
+            batch_size: int = 20,
             customer_count: int = 100,
             concurrency: int = 5,
             min_score: float = 50.0,
@@ -500,6 +500,10 @@ class CustomerAgent:
         try:
             # 获取评论数据，并且过滤+清洗
             comments_data = await self.fetch_video_comments(aweme_id, ins_filter, twitter_filter, region_filter)
+            # save as local json file
+            with open(f"comments_{aweme_id}.json", "w") as f:
+                json.dump(comments_data, f)
+
             comments = comments_data.get('comments')
 
             # 将comments列表转换为DataFrame
@@ -594,6 +598,9 @@ class CustomerAgent:
             processing_time = time.time() - start_time
             logger.info(
                 f"✅ 分析完成，成功处理 {len(comments)} 条评论，客户总数: {len(potential_customers)}，耗时: {processing_time:.2f}秒")
+
+            # 根据commenter_uniqueId去重
+            potential_customers = pd.DataFrame(potential_customers).drop_duplicates(subset=['commenter_uniqueId']).to_dict('records')
             return {
                 'aweme_id': aweme_id,
                 'potential_customers': potential_customers,
@@ -612,7 +619,7 @@ class CustomerAgent:
     async def get_keyword_potential_customers(
             self,
             keyword: str,
-            batch_size: int = 30,
+            batch_size: int = 20,
             customer_count: int = 100,
             video_concurrency: int = 5,
             ai_concurrency: int = 5,
@@ -658,7 +665,7 @@ class CustomerAgent:
                 raise ValueError("无效的关键词")
 
             # 获取清理后的视频数据
-            video_collector = VideoCollector(self.tikhub_api_key, self.tikhub_base_url)
+            video_collector = VideoCollector(self.tikhub_api_key)
             video_cleaner = VideoCleaner()
             raw_videos = await video_collector.collect_videos_by_keyword(keyword)
             cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
@@ -719,6 +726,8 @@ class CustomerAgent:
 
             # 根据潜在价值过滤和排序
             potential_customers_df = pd.DataFrame(potential_customers)
+            # 根据commenter_uniqueId去重
+            potential_customers_df = potential_customers_df.drop_duplicates(subset=['commenter_uniqueId'])
             filtered_df = potential_customers_df[
                 potential_customers_df['engagement_score'].between(min_score, max_score)
             ].sort_values(by='engagement_score', ascending=False)
@@ -1036,6 +1045,9 @@ class CustomerAgent:
 
             if analyzed_df.empty:
                 raise InternalServerError(f"分析视频 {aweme_id} 的评论失败")
+
+            # 根据commenter_uniqueId去重
+            analyzed_df = analyzed_df.drop_duplicates(subset=['commenter_uniqueId'])
 
             # 生成分析摘要
             analysis_summary = {
