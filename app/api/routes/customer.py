@@ -10,15 +10,6 @@ from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Bod
 from typing import Dict, Any, List, Optional
 import time
 from datetime import datetime
-
-from app.api.models.customer import (
-    VideoCommentsRequest,
-    VideoCommentsResponse,
-    PurchaseIntentRequest,
-    PurchaseIntentAnalysis,
-    PotentialCustomersRequest,
-    PotentialCustomersAnalysis
-)
 from app.api.models.responses import create_response
 from agents.customer_agent import CustomerAgent
 from app.core.exceptions import (
@@ -112,6 +103,7 @@ async def fetch_video_comments(
 用途:
   * 全面洞察视频评论中的购买意向，挖掘潜在商机
   * 返回购买意图统计数据 (舆情分布图，兴趣等级，购买意向统计）
+  * 返回购买意图分析报告链接（report_url)
 
 参数:
   * aweme_id: TikTok视频ID
@@ -187,8 +179,12 @@ async def analyze_purchase_intent(
 参数:
   * aweme_id: TikTok视频ID
   * batch_size: 每批处理评论数量，默认30
+  * customer_count: 最大返回客户数量，默认100
   * min_score: 最小购买意向分数，范围0-100，默认50
   * max_score: 最大购买意向分数，范围1-100，默认100
+  * ins_filter: 是否过滤Instagram为空的用户，默认False
+  * twitter_filter: 是否过滤Twitter为空的用户，默认False
+  * region_filter: 按地区过滤用户，默认不过滤
 
 （一键找出可能为您买单的优质用户！）
 """,
@@ -271,7 +267,7 @@ async def get_potential_customers(
 参数:
   * keyword: 搜索关键词
   * batch_size: 每批处理评论数量，默认30
-* customer_count: 最大返回客户数量，默认100
+  * customer_count: 最大返回客户数量，默认100
   * video_concurrency: 视频处理并发数，默认5
   * ai_concurrency: AI处理并发数，默认5
   * min_score: 最小购买意向分数，范围0-100，默认50
@@ -447,7 +443,7 @@ async def generate_single_reply(
 
 参数:
   * shop_info: 店铺信息
-  * customer_messages: 客户消息列表，每个包含commenter_uniqueId, comment_id, text
+  * customer_messages: 客户消息列表，每个包含commenter_uniqueId,text
   * batch_size: 每批处理消息数量，默认5
 
 （让沟通效率倍增，从此告别重复回复！）
@@ -458,21 +454,18 @@ async def generate_batch_replies(
         request: Request,
         shop_info: str = Query(..., description="店铺信息"),
         batch_size: int = Query(5, description="每批处理消息数量"),
-        customer_messages: List[Dict[str, Any]] = Body(...,
-                                                       description="客户消息列表，每个包含commenter_uniqueId, comment_id, text",
-                                                       examples=[[{
-                                                           "commenter_uniqueId": "user1",
-                                                           "comment_id": "c1",
-                                                           "text": "Où puis-je trouver les informations sur la livraison ?"
-                                                           # 法语: 我在哪里可以找到配送信息？
-                                                       },
-                                                           {
-                                                               "commenter_uniqueId": "user2",
-                                                               "comment_id": "c2",
-                                                               "text": "What is the return policy?"  # 英语: 退货政策是什么？
-                                                           },
-                                                       ]]
-                                                       ),
+        customer_messages: Dict[str, Any] = Body(...,
+                                                 description="客户消息列表，每个包含commenter_uniqueId, comment_id, text",
+                                                 examples=[{
+                                                     "jessica1h": "请问这款气垫粉底适合干皮吗？我皮肤比较干，担心会起皮。",
+                                                     # 中文
+                                                     "adam_123": "Do you ship internationally? I'd like to order some items to Canada.",
+                                                     # 英文
+                                                     "yuki_kawaii": "この美容マスクは本当に素晴らしいです！肌がとても潤いました。また購入します！",
+                                                     # 日语
+                                                     "k_beauty_fan": "이 제품에 알코올이 포함되어 있나요? 제가 알코올에 민감해서요.",  # 韩语
+                                                 }]
+                                                 ),
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """

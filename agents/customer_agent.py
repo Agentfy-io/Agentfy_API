@@ -1333,7 +1333,7 @@ This format ensures efficient multilingual customer support while maintaining hi
     async def generate_customer_reply_messages(
             self,
             shop_info: str,
-            customer_messages: List[Dict[str, Any]],
+            customer_messages: Dict[str, str],  # Changed type annotation to match actual input
             batch_size: int = 5
     ) -> List[Dict[str, Any]]:
         """
@@ -1341,7 +1341,7 @@ This format ensures efficient multilingual customer support while maintaining hi
 
         Args:
             shop_info (str): 店铺信息
-            customer_messages (List[Dict[str, Any]]): 客户消息列表, 每个消息包括commenter_uniqueId, comment_id, text
+            customer_messages (Dict[str, str]): 客户消息字典, 键为用户ID, 值为消息内容
             batch_size (int, optional): 每批处理的客户消息数量. 默认为5.
 
         Returns:
@@ -1357,42 +1357,32 @@ This format ensures efficient multilingual customer support while maintaining hi
                 raise ValueError("店铺信息不能为空")
 
             if not customer_messages:
-                raise ValueError("客户消息列表不能为空")
+                raise ValueError("客户消息字典不能为空")
 
-            # 检查消息格式
-            for msg in customer_messages:
-                if "commenter_uniqueId" not in msg or "text" not in msg:
-                    raise ValueError(f"消息格式错误, 必须包含commenter_uniqueId和text字段: {msg}")
+            # 转换字典为列表格式
+            messages_list = [{"commenter_uniqueId": uid, "text": text} for uid, text in customer_messages.items()]
 
             # 准备结果列表
             all_replies = []
 
-            # 按批次处理消息
-            for i in range(0, len(customer_messages), batch_size):
-                batch = customer_messages[i:i + batch_size]
+            logger.info("开始批量生成客户回复消息")
 
-                # 构建批处理提示
-                batch_messages = []
-                for idx, msg in enumerate(batch):
-                    batch_messages.append({
-                        "message_id": idx,
-                        "commenter_uniqueId": msg.get("commenter_uniqueId"),
-                        "comment_id": msg.get("comment_id", ""),
-                        "message_text": msg.get("text")  # 注意此处key改为message_text以适配prompt
-                    })
+            # 按批次处理消息
+            for i in range(0, len(messages_list), batch_size):
+                batch = messages_list[i:i + batch_size]
 
                 batch_prompt = {
                     "shop_info": shop_info,
-                    "messages": batch_messages
+                    "messages": batch
                 }
 
                 # 将字典转换为JSON字符串
-                batch_prompt_json = json.dumps(batch_prompt, ensure_ascii=False)
+                user_prompt = f"here is the shop information:\n{shop_info}\n\nhere are the customer messages:\n{json.dumps(batch, ensure_ascii=False)}"
 
                 # 调用AI生成回复
                 batch_replies = await self.chatgpt.chat(
                     system_prompt=self.system_prompts['batch_customer_reply'],
-                    user_prompt=batch_prompt_json,  # 确保这里传入的是字符串
+                    user_prompt=user_prompt,
                     temperature=0.7
                 )
 
@@ -1419,13 +1409,14 @@ This format ensures efficient multilingual customer support while maintaining hi
                         message_id = reply.get("message_id")
                         if message_id is not None and 0 <= message_id < len(batch):
                             reply["commenter_uniqueId"] = batch[message_id].get("commenter_uniqueId")
-                            reply["comment_id"] = batch[message_id].get("comment_id", "")
 
                         all_replies.append(reply)
 
                 except json.JSONDecodeError as json_err:
                     logger.error(f"无法解析AI返回的JSON结果: {batch_replies[:200]}... (错误: {str(json_err)})")
                     raise RuntimeError(f"AI返回的结果不是有效的JSON格式: {str(json_err)}")
+
+            logger.info("批量生成客户回复消息完成")
 
             return all_replies
 
@@ -1441,12 +1432,42 @@ This format ensures efficient multilingual customer support while maintaining hi
             logger.error(f"批量生成客户回复消息时发生未预期错误: {str(e)}", exc_info=True)
             raise RuntimeError(f"批量生成客户回复消息时发生未预期错误: {str(e)}")
 
-
 async def main():
     """主函数，用于测试CustomerAgent功能"""
     agent = CustomerAgent()
     # 获取潜在客户
-    result = await agent.get_keyword_potential_customers("iphone 13", customer_count=400, min_score=50, max_score=100)
+    #result = await agent.get_keyword_potential_customers("iphone 13", customer_count=400, min_score=50, max_score=100)
+
+    # 测试批量生成客户回复消息
+    shop_info = """
+    店铺名称：星辰美妆旗舰店
+    店铺简介：成立于2018年，专注于高品质亚洲美妆产品，主营韩国和日本护肤品、彩妆产品。
+    品牌理念：让每个人都能拥有健康自然的美丽肌肤。
+    售后政策：7天无理由退换，30天质量问题包退换，72小时内发货。
+    优惠活动：每周二会员日9折，新客首单满200减30，全场满399包邮。
+    热销产品：补水面膜系列、轻薄气垫粉底、温和卸妆油。
+    """
+    # 客户消息字典（使用10种不同语言）
+    customer_messages = {
+        "jessica1h": "请问这款气垫粉底适合干皮吗？我皮肤比较干，担心会起皮。",  # 中文
+        "adam_123": "Do you ship internationally? I'd like to order some items to Canada.",  # 英文
+        "yuki_kawaii": "この美容マスクは本当に素晴らしいです！肌がとても潤いました。また購入します！",  # 日语
+        "k_beauty_fan": "이 제품에 알코올이 포함되어 있나요? 제가 알코올에 민감해서요.",  # 韩语
+        "maria_es": "¿Hay alguna promoción especial para el Día de la Madre? Quiero comprar un regalo para mi mamá.",
+        # 西班牙语
+        "pierre75": "J'ai commandé il y a une semaine et je n'ai toujours pas reçu de confirmation d'expédition. C'est inquiétant.",
+        # 法语
+        "deutsch_beauty": "Wie ist Ihre Rückerstattungspolitik, wenn mir ein Produkt nicht gefällt? Muss ich die Versandkosten bezahlen?",
+        # 德语
+        "natasha_r": "Как часто нужно использовать эту сыворотку? Утром и вечером или только один раз в день?",  # 俄语
+        "fatima_beauty": "شكراً جزيلاً على الخدمة الممتازة! وصلت المنتجات بسرعة وكانت بحالة ممتازة.",  # 阿拉伯语
+        "bella_italia": "Quale prodotto consigliate per la pelle mista con tendenza all'acne? Ho bisogno di qualcosa di delicato ma efficace."
+        # 意大利语
+    }
+
+    # 生成回复消息
+    result = await agent.generate_customer_reply_messages(shop_info, customer_messages)
+    print(result)
 
 
 if __name__ == "__main__":
