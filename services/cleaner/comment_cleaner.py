@@ -2,6 +2,8 @@ from typing import Dict, Any, List, Optional
 import asyncio
 from datetime import datetime
 
+import pandas as pd
+
 from app.utils.logger import setup_logger
 from app.core.exceptions import ValidationError
 
@@ -74,6 +76,10 @@ class CommentCleaner:
                         logger.warning(f"跳过无效评论: 缺少ID或文本")
 
                 logger.info(f"成功清洗视频 {aweme_id} 的 {len(cleaned_comments)} 条评论")
+
+                # 根据commenter_uniqueId去重，用panda
+                cleaned_comments = pd.DataFrame(cleaned_comments).drop_duplicates(subset=['commenter_uniqueId']).to_dict(orient='records')
+
                 return {
                     'aweme_id': aweme_id,
                     'comments': cleaned_comments,
