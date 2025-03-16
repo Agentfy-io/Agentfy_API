@@ -19,13 +19,12 @@ class CommentCleaner:
 
     async def clean_video_comments(
             self,
-            comments: Dict[str, Any]
-    ) -> Dict[str, Any]:
+            comments: List[Dict]
+    ) -> List[Dict]:
         """
         清洗和处理特定视频的原始评论
 
         Args:
-            aweme_id: 视频ID
             comments: 原始评论列表
 
         Returns:
@@ -35,61 +34,61 @@ class CommentCleaner:
             ValidationError: 当输入数据无效时
         """
         if self.status:
-            aweme_id = comments.get('aweme_id', '')
-            if not aweme_id:
-                raise ValidationError(detail="视频ID不能为空", field="aweme_id")
 
-            comments = comments.get('comments', [])
             if not isinstance(comments, list):
                 raise ValidationError(detail="评论数据必须是列表", field="comments")
 
+            # 清洗和处理评论
+            cleaned_comments = []
+            aweme_id = None
+
             try:
-                # 清洗和处理评论
-                cleaned_comments = []
                 for comment in comments:
-                    if not isinstance(comment, dict):
+                    # 如果该条 comment 的数据不符合预期，就直接跳过（如不是 dict 或为空）
+                    if not isinstance(comment, dict) or not comment:
                         logger.warning(f"跳过无效评论格式: {type(comment)}")
                         continue
 
-                    # 提取用户数据，防止KeyError
-                    user_data = comment.get('user', {}) or {}
+                    try:
+                        # 这里如果 'user' 或 'aweme_id' 等关键字段不存在，就会触发 KeyError
+                        user_data = comment['user']
+                        aweme_id = comment['aweme_id']
 
-                    # 创建清洗后的评论对象
-                    cleaned_comment = {
-                        'comment_id': comment.get('cid', ''),
-                        'text': self._clean_text(comment.get('text', '')),
-                        'comment_language': comment.get('comment_language', ''),
-                        'digg_count': self._parse_int(comment.get('digg_count', 0)),
-                        'reply_count': self._parse_int(comment.get('reply_comment_total', 0)),
-                        'commenter_secuid': user_data.get('sec_uid', ''),
-                        'commenter_uniqueId': user_data.get('unique_id', ''),
-                        'commenter_region': user_data.get('region', ''),
-                        'ins_id': user_data.get('ins_id', ''),
-                        'twitter_id': user_data.get('twitter_id', ''),
-                        'create_time': comment.get('create_time', '')
-                    }
+                        # 创建清洗后的评论对象
+                        cleaned_comment = {
+                            'aweme_id': comment.get('aweme_id'),
+                            'comment_id': comment.get('cid', ''),
+                            'text': self._clean_text(comment.get('text', '')),
+                            'comment_language': comment.get('comment_language', ''),
+                            'digg_count': self._parse_int(comment.get('digg_count', 0)),
+                            'reply_count': self._parse_int(comment.get('reply_comment_total', 0)),
+                            'commenter_secuid': user_data.get('sec_uid', ''),
+                            'commenter_uniqueId': user_data.get('unique_id', ''),
+                            'commenter_region': user_data.get('region', ''),
+                            'ins_id': user_data.get('ins_id', ''),
+                            'twitter_id': user_data.get('twitter_id', ''),
+                            'create_time': comment.get('create_time', '')
+                        }
 
-                    # 只添加有效评论（必须有ID和文本）
-                    if cleaned_comment['comment_id'] and cleaned_comment['text']:
-                        cleaned_comments.append(cleaned_comment)
-                    else:
-                        logger.warning(f"跳过无效评论: 缺少ID或文本")
+                        # 只添加有效评论（必须有ID和文本）
+                        if cleaned_comment['comment_id'] and cleaned_comment['text']:
+                            cleaned_comments.append(cleaned_comment)
+                        else:
+                            logger.warning("跳过无效评论: 缺少ID或文本")
 
+                    except KeyError as e:
+                        # 当出现 KeyError 时，记录错误并返回已成功清洗的评论（不抛出异常）
+                        logger.error(f"评论数据缺少关键字段: {str(e)}，跳过处理")
+                        continue
+
+                # 如果所有评论都处理成功，此时再进行去重，并返回
                 logger.info(f"成功清洗视频 {aweme_id} 的 {len(cleaned_comments)} 条评论")
-
-                # 根据commenter_uniqueId去重，用panda
-                cleaned_comments = pd.DataFrame(cleaned_comments).drop_duplicates(subset=['commenter_uniqueId']).to_dict(orient='records')
-
-                return {
-                    'aweme_id': aweme_id,
-                    'comments': cleaned_comments,
-                    'total_comments': len(cleaned_comments),
-                }
+                return cleaned_comments
 
             except Exception as e:
-                logger.error(f"清洗视频 {aweme_id} 评论时出错: {str(e)}")
-                # 返回已清洗的评论（可能是部分），而不是抛出异常中断整个流程
-                return []
+                logger.error(f"处理视频{aweme_id}时出现异常: {str(e)}，返回已处理的评论")
+                return cleaned_comments
+
 
     def _clean_text(self, text: str) -> str:
         """清洗评论文本，去除多余空白"""
