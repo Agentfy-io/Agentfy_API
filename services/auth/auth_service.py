@@ -1,3 +1,8 @@
+# -*- coding: utf-8 -*-
+"""
+@file: auth_service.py
+@desc: 认证服务，管理用户会话和TikHub API密钥
+"""
 import uuid
 import time
 import json
@@ -20,13 +25,15 @@ api_key_header = APIKeyHeader(name="X-Session-ID", auto_error=False)
 
 # 用户会话存储（实际应用中应使用Redis或数据库）
 user_sessions = {}
+# TikHub API基础URL
+base_url = settings.TIKHUB_BASE_URL
 
 
 class AuthService:
     """认证服务，管理用户会话和TikHub API密钥"""
 
     @staticmethod
-    async def verify_tikhub_api_key(api_key: str, base_url: str) -> bool:
+    async def verify_tikhub_api_key(api_key: str) -> bool:
         """
         验证TikHub API密钥是否有效
 
@@ -39,7 +46,7 @@ class AuthService:
         """
         try:
             # 构建测试接口URL（使用一个简单的TikHub API端点）
-            test_url = f"{base_url.rstrip('/')}/api/v1/tiktok/check_health"
+            test_url = f"{base_url}/api/v1/tikhub/user/get_user_info"
 
             headers = {
                 "Authorization": f"Bearer {api_key}",
@@ -59,11 +66,10 @@ class AuthService:
                         return True
         except Exception as e:
             logger.error(f"验证TikHub API密钥时出错: {str(e)}")
-            # 在无法验证的情况下，仍然允许用户使用该密钥
-            return True
+            return False
 
     @staticmethod
-    async def create_session(api_key: str, base_url: str) -> Tuple[str, datetime]:
+    async def create_session(api_key: str) -> Tuple[str, datetime]:
         """
         创建新的用户会话
 
