@@ -188,5 +188,7 @@ if __name__ == "__main__":
     port = int(os.getenv("PORT", "8000"))
     debug = os.getenv("DEBUG", "False").lower() == "true"
 
+    print(f"Starting server at {host}:{port} with debug={debug}")
+
     # 启动服务器
     uvicorn.run(app, host=host, port=port, reload=debug)
