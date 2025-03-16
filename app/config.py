@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # TikHub API 配置
     TIKHUB_BASE_URL: str = Field("https://api.tikhub.io", env="TIKHUB_BASE_URL")
 
+    #report 路径
+    REPORT_PATH: str = Field("reports", env="REPORT_PATH")
+
     # 服务器设置
     HOST: str = Field("0.0.0.0", env="HOST")
     PORT: int = Field(8000, env="PORT")
