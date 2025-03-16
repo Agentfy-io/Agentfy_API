@@ -31,8 +31,8 @@ class Settings(BaseSettings):
     REPORT_PATH: str = Field("reports", env="REPORT_PATH")
 
     # 服务器设置
-    HOST: str = Field("0.0.0.0", env="HOST")
-    PORT: int = Field(8000, env="PORT")
+    HOST: str = Field("64.23.158.208", env="HOST")
+    PORT: int = Field(80, env="PORT")
     DEBUG: bool = Field(False, env="DEBUG")
 
     # 日志设置
