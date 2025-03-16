@@ -13,10 +13,10 @@ from fastapi.openapi.utils import get_openapi
 import uvicorn
 from dotenv import load_dotenv
 
-from app.api.routes import customer, auth, sentiment, video, audio
-from app.core.exceptions import CommentAPIException
-from app.utils.logger import setup_logger
-from app.dependencies import log_request_middleware
+from api.routes import customer, auth, sentiment, video, audio
+from core.exceptions import CommentAPIException
+from utils.logger import setup_logger
+from dependencies import log_request_middleware
 
 # 加载环境变量
 load_dotenv()
