@@ -180,12 +180,13 @@ class VideoCleaner:
                 'error': str(e),
             }
 
-    async def clean_videos_by_keyword(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def clean_videos_by_keyword(self, video_data: Dict[str, Any], min_diggCount: int= 500) -> Dict[str, Any]:
         """
         清洗和处理关键词搜索视频列表
 
         Args:
             video_data: 原始视频列表数据
+            min_diggCount: 最小点赞数
 
         Returns:
             清洗后的视频列表
@@ -206,6 +207,8 @@ class VideoCleaner:
 
             for video in video_list:
                 try:
+                    if video.get('stats', {}).get('diggCount', 0) < min_diggCount:
+                        continue
                     cleaned_video = {
                         'aweme_id': video.get('id', ''),
                         'desc': video.get('desc', ''),
