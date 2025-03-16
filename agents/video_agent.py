@@ -231,6 +231,56 @@ class VideoAgent:
             logger.error(f"获取视频数据时发生未预期错误: {str(e)}")
             raise InternalServerError(detail=f"获取视频数据时发生未预期错误: {str(e)}")
 
+    def convert_markdown_to_html(self, markdown_content: str, title: str = "Analysis Report") -> str:
+        """
+        将Markdown内容转换为HTML
+
+        Args:
+            markdown_content (str): Markdown内容
+            title (str): HTML页面标题
+
+        Returns:
+            str: HTML内容
+        """
+        try:
+            import markdown
+        except ImportError:
+            print("请安装markdown库: pip install markdown")
+            return f"<pre>{markdown_content}</pre>"
+
+        # 转换Markdown为HTML
+        html_content = markdown.markdown(
+            markdown_content,
+            extensions=['tables', 'fenced_code', 'codehilite', 'toc']
+        )
+
+        # 创建完整HTML文档
+        css = """
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.6; max-width: 800px; margin: 0 auto; padding: 20px; color: #333; }
+        h1, h2, h3 { margin-top: 1.5em; color: #111; }
+        pre { background-color: #f6f8fa; border-radius: 3px; padding: 16px; overflow: auto; }
+        code { font-family: SFMono-Regular, Consolas, Menlo, monospace; background-color: #f6f8fa; padding: 0.2em 0.4em; border-radius: 3px; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 1em; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background-color: #f6f8fa; }
+        """
+
+        html_document = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title}</title>
+        <style>{css}</style>
+    </head>
+    <body>
+        <h1>{title}</h1>
+        {html_content}
+    </body>
+    </html>
+        """
+
+        return html_document
 
     async def analyze_video_info(self, aweme_id: str) -> Dict[str, Any]:
         """
@@ -271,31 +321,42 @@ class VideoAgent:
             )
 
             # 解析 AI 返回的结果
-            analysis_results = response["choices"][0]["message"]["content"].strip()
+            report = response["choices"][0]["message"]["content"].strip()
             logger.info("✅ 已完成用户/达人基础信息分析")
 
-            # 将 Markdown 转换为 HTML
-            analysis_html = markdown(analysis_results)
+            # 保存Markdown报告
+            report_dir = "reports"
+            os.makedirs(report_dir, exist_ok=True)
 
-            # 生成一个唯一文件名
-            unique_id = str(uuid.uuid4())
-            file_name = f"report_{unique_id}.html"
+            report_md_path = os.path.join(report_dir, f"report_{aweme_id}.md")
+            with open(report_md_path, "w", encoding="utf-8") as f:
+                f.write(report)
 
-            # 将 HTML 写入本地文件
-            file_path = os.path.join("./reports", file_name)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                f.write(analysis_html)
+            # 转换为HTML
+            html_content = self.convert_markdown_to_html(report, f"video_info Analysis for {aweme_id}")
+            html_filename = f"report_{aweme_id}.html"
+            html_path = os.path.join(report_dir, html_filename)
 
-            # 这里返回的 temp_display_url 就是本地的文件路径或相对路径
-            # 具体如何对外访问，需要看你如何配置路由或静态文件服务
-            temp_display_url = file_path
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
 
-            logger.info("✅ 已完成用户/达人基础信息分析")
+            # 生成本地文件URL
+            absolute_path = os.path.abspath(html_path)
+
+            # 构建file://协议URL
+            file_url = f"file://{absolute_path}"
+
+            # 确保路径分隔符是URL兼容的
+            if os.name == 'nt':  # Windows系统
+                # Windows路径需要转换为URL格式
+                file_url = file_url.replace('\\', '/')
+
+            logger.info(f"报告已生成: Markdown ({report_md_path}), HTML ({html_path})")
+            logger.info(f"报告本地URL: {file_url}")
 
             return {
                 'aweme_id': aweme_id,
-                'video_info_html': analysis_html,  # 转换后的 HTML
-                'temp_display_url': temp_display_url,  # 存储的文件路径
+                'report': file_url,
                 'timestamp': datetime.now().isoformat(),
                 'processing_time': round(time.time() - start_time, 2)
             }
