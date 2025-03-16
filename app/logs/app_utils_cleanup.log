@@ -1,0 +1,82 @@
+2025-03-16 23:45:54 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-16 23:45:54 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-16 23:45:54 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-16 23:45:54 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-16 23:45:54 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-16 23:57:34 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-16 23:57:45 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-16 23:57:45 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-16 23:57:45 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-16 23:57:45 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-16 23:57:45 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:00:43 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 00:00:55 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 00:00:55 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 00:00:55 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:00:55 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 00:00:55 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:14:25 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 00:14:37 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 00:14:37 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 00:14:37 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:14:37 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 00:14:37 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:17:17 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 00:17:28 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 00:17:28 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 00:17:28 - app.utils.cleanup - INFO - 已清理 1 个文件
+2025-03-17 00:17:28 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 00:17:28 - app.utils.cleanup - INFO - 已清理 2 个文件
+2025-03-17 00:19:48 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 00:19:59 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 00:19:59 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 00:19:59 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:19:59 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 00:19:59 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:20:21 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 00:20:33 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 00:20:33 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 00:20:33 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:20:33 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 00:20:33 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 00:50:34 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 00:50:34 - app.utils.cleanup - INFO - 已清理 4 个文件
+2025-03-17 00:50:34 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 00:50:34 - app.utils.cleanup - INFO - 已清理 6 个文件
+2025-03-17 00:57:03 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 00:57:15 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 00:57:15 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 00:57:15 - app.utils.cleanup - INFO - 已清理 1 个文件
+2025-03-17 00:57:15 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 00:57:15 - app.utils.cleanup - INFO - 已清理 2 个文件
+2025-03-17 01:07:12 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 01:07:23 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 01:07:23 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 01:07:23 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:07:23 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 01:07:23 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:15:16 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 01:15:27 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 01:15:27 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 01:15:27 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:15:27 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 01:15:27 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:16:56 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 01:17:07 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 01:17:07 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 01:17:07 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:17:07 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 01:17:07 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:22:09 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 01:22:20 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 01:22:20 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 01:22:20 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:22:20 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 01:22:20 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:23:47 - app.utils.cleanup - INFO - 文件清理服务已停止
+2025-03-17 01:23:59 - app.utils.cleanup - INFO - 文件清理服务已启动，间隔: 1800秒
+2025-03-17 01:23:59 - app.utils.cleanup - INFO - 清理目录: uploads
+2025-03-17 01:23:59 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:23:59 - app.utils.cleanup - INFO - 清理目录: static
+2025-03-17 01:23:59 - app.utils.cleanup - INFO - 已清理 0 个文件
+2025-03-17 01:28:35 - app.utils.cleanup - INFO - 文件清理服务已停止

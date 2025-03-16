@@ -6,23 +6,36 @@
 """
 
 import os
-from fastapi import FastAPI, Request
+# from urllib.request import localhost
+
+from fastapi import FastAPI, Request,Query,HTTPException
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 import uvicorn
 from dotenv import load_dotenv
 
-from app.api.routes import customer, auth, sentiment, video, audio
+from typing import  Optional, Dict, Any
+from app.api.routes import customer, auth, sentiment, video, audio, video_subtitles
+
 from app.core.exceptions import CommentAPIException
 from app.utils.logger import setup_logger
 from app.dependencies import log_request_middleware
+from app.utils.cleanup import CleanupService
+from app.config import settings
+from fastapi.staticfiles import StaticFiles
+
 
 # 加载环境变量
 load_dotenv()
 
 # 设置日志
 logger = setup_logger(__name__)
+
+# 启动清理服务
+cleanup_service = CleanupService([settings.UPLOAD_DIR,settings.STATIC_DIR], settings.CLEANUP_INTERVAL)
+cleanup_service.start()
+
 
 title = "Agentfy API - Any Data, Any Analysis, Any Generators"
 description = f"""
@@ -98,6 +111,12 @@ app = FastAPI(
         "filter": True  # 启用过滤功能
     }
 )
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+os.makedirs(settings.OUTPUT_DIR, exist_ok=True)
+os.makedirs(settings.STATIC_DIR, exist_ok=True)
+
+# 挂载静态文件目录
+app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
 
 # 添加CORS中间件
 app.add_middleware(
@@ -151,8 +170,11 @@ app.openapi = custom_openapi
 # app.include_router(auth.router, prefix="/api/v1", tags=["认证"])
 app.include_router(customer.router, prefix="/api/v1", tags=["购买客户分析"])
 app.include_router(sentiment.router, prefix="/api/v1", tags=["评论舆情分析"])
-app.include_router(video.router, prefix="/api/v1", tags=["视频全方位分析"])
-app.include_router(audio.router, prefix="/api/v1", tags=["短视频脚本/音频生成"])
+
+app.include_router(video.router, prefix="/api/v1", tags=["视频分析"])
+app.include_router(audio.router, prefix="/api/v1", tags=["音频内容生成"])
+app.include_router(video_subtitles.router, prefix="/api/v1", tags=["视频字幕生成,提取，去除"])
+
 
 # 全局异常处理
 @app.exception_handler(CommentAPIException)
@@ -181,10 +203,50 @@ async def root():
     """将根路径重定向到API文档"""
     return RedirectResponse(url="/docs")
 
+@app.get("/jobs/{job_id}", response_model=Dict[str, Any])
+async def get_job_status(job_id: str):
+    """
+    获取作业状态
+    - 返回作业的当前状态和结果(如果已完成)
+    """
+    job_info = settings.job_manager.get_job(job_id)
+    if not job_info:
+        raise HTTPException(status_code=404, detail=f"找不到作业: {job_id}")
+
+    return job_info
+
+
+@app.get("/jobs")
+async def list_jobs(
+        status: Optional[str] = Query(None),
+        limit: int = Query(100, ge=1, le=1000),
+        skip: int = Query(0, ge=0)
+):
+    """
+    列出所有作业
+    - 支持按状态过滤
+    - 支持分页
+    """
+    return settings.job_manager.list_jobs(status=status, limit=limit, skip=skip)
+
+
+# 应用启动和关闭事件
+@app.on_event("startup")
+async def startup_event():
+    """应用启动时执行"""
+    logger.info("应用启动")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时执行"""
+    logger.info("应用关闭")
+    cleanup_service.stop()
+
 
 # 主函数
 if __name__ == "__main__":
-    host = os.getenv("HOST", "0.0.0.0")
+    host = os.getenv("HOST", "localhost")
     port = int(os.getenv("PORT", "8000"))
     debug = os.getenv("DEBUG", "False").lower() == "true"
 

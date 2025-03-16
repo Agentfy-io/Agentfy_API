@@ -1,0 +1,14 @@
+2025-03-17 01:22:51 - services.ai_models.videoOCR - INFO - Opening video: https://v45-p.tiktokcdn-us.com/900115978f53c21ad336dbb55adc4b2b/67c1b774/video/tos/useast5/tos-useast5-ve-0068c001-tx/oMBnVfDKvySfuWOY9uuPSulEgugFQCncDIgA7U/?a=1233&bti=OUBzOTg7QGo6OjZAL3AjLTAzYCMxNDNg&ch=0&cr=13&dr=0&er=0&lr=all&net=0&cd=0%7C0%7C0%7C&br=3014&bt=1507&cs=0&ds=6&ft=yh7iX9DfxxOusQOFDnL76GFpA-JuGb1nNADwF_utoFmQ2Nz7T&mime_type=video_mp4&qs=0&rc=aGVkOjo8NjY5MzU3NDdpPEBpamRqa2o5cjxseDMzZzgzNEAvYV4yXzMtNS0xNl5hXi1iYSNfcHFfMmRja3JgLS1kLy9zcw%3D%3D&vvpl=1&l=20250228071638948B86E678A8EC05FCB1&btag=e00095000
+2025-03-17 01:24:20 - services.ai_models.videoOCR - INFO - Opening video: uploads\6f27263c-332a-4f2d-a032-3f124c6e3d50.mp4
+2025-03-17 01:24:20 - services.ai_models.videoOCR - INFO - 视频信息:
+2025-03-17 01:24:20 - services.ai_models.videoOCR - INFO - - FPS: 30.0
+2025-03-17 01:24:20 - services.ai_models.videoOCR - INFO - - 总帧数: 10902
+2025-03-17 01:24:20 - services.ai_models.videoOCR - INFO - - 视频时长: 363.40秒
+2025-03-17 01:24:20 - services.ai_models.videoOCR - INFO - - 时间间隔: 90秒
+2025-03-17 01:24:20 - services.ai_models.videoOCR - INFO - - 置信度阈值: 0.5
+2025-03-17 01:24:21 - services.ai_models.videoOCR - INFO - 正在分析第1处时间(0.00s) - 进度: 0.0%
+2025-03-17 01:24:21 - services.ai_models.videoOCR - INFO - 正在分析第2处时间(90.00s) - 进度: 24.8%
+2025-03-17 01:24:22 - services.ai_models.videoOCR - INFO - 正在分析第3处时间(180.00s) - 进度: 49.5%
+2025-03-17 01:24:22 - services.ai_models.videoOCR - INFO - 正在分析第4处时间(270.00s) - 进度: 74.3%
+2025-03-17 01:24:22 - services.ai_models.videoOCR - INFO - 正在分析第5处时间(360.00s) - 进度: 99.1%
+2025-03-17 01:24:22 - services.ai_models.videoOCR - INFO - 视频分析完成，共分析5个时间点

@@ -1,0 +1,411 @@
+2025-03-16 17:40:42 - agents.video_subtitles_agent - INFO - 获取视频 uploads\613cb1e7-dd0d-4074-a216-029761e03c48.mp4 的路径
+2025-03-16 17:40:42 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/613cb1e7-dd0d-4074-a216-029761e03c48_da7feb3f-9c2f-4c20-9739-c0a443e8732e_subtitled.mp4', 'srt_url': '/static/613cb1e7-dd0d-4074-a216-029761e03c48_da7feb3f-9c2f-4c20-9739-c0a443e8732e.srt', 'source_language': 'en', 'target_language': 'zh', 'file_paths': {'video': 'static\\613cb1e7-dd0d-4074-a216-029761e03c48_da7feb3f-9c2f-4c20-9739-c0a443e8732e_subtitled.mp4', 'srt': 'static\\613cb1e7-dd0d-4074-a216-029761e03c48_da7feb3f-9c2f-4c20-9739-c0a443e8732e.srt'}}
+2025-03-16 17:44:49 - agents.video_subtitles_agent - INFO - 获取视频 uploads\aee8b82f-ba19-4323-bbcf-0958ad681b69.mp4 的路径
+2025-03-16 17:45:59 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/aee8b82f-ba19-4323-bbcf-0958ad681b69_f77f335f-a076-4281-af2c-dfef6a2d57ac_subtitled.mp4', 'srt_url': '/static/aee8b82f-ba19-4323-bbcf-0958ad681b69_f77f335f-a076-4281-af2c-dfef6a2d57ac.srt', 'source_language': 'en', 'target_language': 'zh', 'file_paths': {'video': 'static\\aee8b82f-ba19-4323-bbcf-0958ad681b69_f77f335f-a076-4281-af2c-dfef6a2d57ac_subtitled.mp4', 'srt': 'static\\aee8b82f-ba19-4323-bbcf-0958ad681b69_f77f335f-a076-4281-af2c-dfef6a2d57ac.srt'}}
+2025-03-16 23:47:16 - agents.video_subtitles_agent - INFO - 获取视频 uploads\a0dbe7fe-2e3b-46d3-8a5f-295fd8d78f14.mp4 的路径
+2025-03-16 23:47:16 - agents.video_subtitles_agent - INFO - 为视频 uploads\a0dbe7fe-2e3b-46d3-8a5f-295fd8d78f14.mp4 识别语音 (语言: en)
+2025-03-16 23:47:16 - agents.video_subtitles_agent - WARNING - Whisper识别失败: VideoSubtitlesAgent.recognize_with_whisper() takes from 1 to 2 positional arguments but 3 were given
+2025-03-16 23:47:16 - agents.video_subtitles_agent - INFO - 翻译文本 (en -> zh) 
+2025-03-16 23:47:19 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/a0dbe7fe-2e3b-46d3-8a5f-295fd8d78f14_d878fa9a-5c00-44ed-90cd-f103ee380b5c_subtitled.mp4', 'srt_url': '/static/a0dbe7fe-2e3b-46d3-8a5f-295fd8d78f14_d878fa9a-5c00-44ed-90cd-f103ee380b5c.srt', 'source_language': 'en', 'target_language': 'zh', 'file_paths': {'video': 'static\\a0dbe7fe-2e3b-46d3-8a5f-295fd8d78f14_d878fa9a-5c00-44ed-90cd-f103ee380b5c_subtitled.mp4', 'srt': 'static\\a0dbe7fe-2e3b-46d3-8a5f-295fd8d78f14_d878fa9a-5c00-44ed-90cd-f103ee380b5c.srt'}}
+2025-03-16 23:58:29 - agents.video_subtitles_agent - INFO - 获取视频 uploads\99f44bd8-3511-4398-9b2b-72302e456e2b.mp4 的路径
+2025-03-16 23:58:29 - agents.video_subtitles_agent - INFO - 为视频 uploads\99f44bd8-3511-4398-9b2b-72302e456e2b.mp4 识别语音 (语言: zh)
+2025-03-16 23:58:29 - agents.video_subtitles_agent - WARNING - Whisper识别失败: VideoSubtitlesAgent.recognize_with_whisper() got multiple values for argument 'language'
+2025-03-16 23:58:29 - agents.video_subtitles_agent - INFO - 翻译文本 (zh -> en) 
+2025-03-16 23:58:31 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/99f44bd8-3511-4398-9b2b-72302e456e2b_d91b588c-aa3e-425e-8804-c8a88b1f993d_subtitled.mp4', 'srt_url': '/static/99f44bd8-3511-4398-9b2b-72302e456e2b_d91b588c-aa3e-425e-8804-c8a88b1f993d.srt', 'source_language': 'zh', 'target_language': 'en', 'file_paths': {'video': 'static\\99f44bd8-3511-4398-9b2b-72302e456e2b_d91b588c-aa3e-425e-8804-c8a88b1f993d_subtitled.mp4', 'srt': 'static\\99f44bd8-3511-4398-9b2b-72302e456e2b_d91b588c-aa3e-425e-8804-c8a88b1f993d.srt'}}
+2025-03-17 00:01:26 - agents.video_subtitles_agent - INFO - 获取视频 uploads\a79c57b9-a6fe-4876-b24f-1d046c26c888.mp4 的路径
+2025-03-17 00:01:26 - agents.video_subtitles_agent - INFO - 为视频 uploads\a79c57b9-a6fe-4876-b24f-1d046c26c888.mp4 识别语音 (语言: en)
+2025-03-17 00:01:48 - agents.video_subtitles_agent - INFO - 翻译文本 (en -> zh) 
+2025-03-17 00:01:50 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/a79c57b9-a6fe-4876-b24f-1d046c26c888_b8833290-a8d1-429b-b325-c3b87b1521ea_subtitled.mp4', 'srt_url': '/static/a79c57b9-a6fe-4876-b24f-1d046c26c888_b8833290-a8d1-429b-b325-c3b87b1521ea.srt', 'source_language': 'en', 'target_language': 'zh', 'file_paths': {'video': 'static\\a79c57b9-a6fe-4876-b24f-1d046c26c888_b8833290-a8d1-429b-b325-c3b87b1521ea_subtitled.mp4', 'srt': 'static\\a79c57b9-a6fe-4876-b24f-1d046c26c888_b8833290-a8d1-429b-b325-c3b87b1521ea.srt'}}
+2025-03-17 00:04:03 - agents.video_subtitles_agent - INFO - 获取视频 uploads\a8a22101-9e92-4df5-8ace-b19b90921b22.mp4 的路径
+2025-03-17 00:04:03 - agents.video_subtitles_agent - INFO - 为视频 uploads\a8a22101-9e92-4df5-8ace-b19b90921b22.mp4 识别语音 (语言: en)
+2025-03-17 00:05:04 - agents.video_subtitles_agent - ERROR - Whisper识别失败: 
+Traceback (most recent call last):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client_reqrep.py", line 1059, in start
+    message, payload = await protocol.read()  # type: ignore[union-attr]
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\streams.py", line 672, in read
+    await self._waiter
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 511, in recognize_with_whisper
+    whisper_result = await wisper.transcriptions(
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\ai_models\whisper.py", line 92, in transcriptions
+    async with session.post(url, data=form_data) as response:
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client.py", line 1425, in __aenter__
+    self._resp: _RetType = await self._coro
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client.py", line 730, in _request
+    await resp.start(conn)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client_reqrep.py", line 1054, in start
+    with self._timer:
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\helpers.py", line 671, in __exit__
+    raise asyncio.TimeoutError from exc_val
+asyncio.exceptions.TimeoutError
+2025-03-17 00:05:04 - agents.video_subtitles_agent - INFO - 翻译文本 (en -> zh) 
+2025-03-17 00:06:10 - agents.video_subtitles_agent - ERROR - 翻译失败: 502: 调用OpenAI API时出错: Connection error.
+Traceback (most recent call last):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection.py", line 101, in handle_async_request
+    raise exc
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_backends\auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_backends\anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1500, in _request
+    response = await self._client.send(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+  File "D:\Users\GM\anaconda3\envs\agent\lib\contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\ai_models\chatgpt.py", line 73, in chat
+    chat_completion = await self.openai_client.chat.completions.create(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\resources\chat\completions\completions.py", line 1927, in create
+    return await self._post(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1524, in _request
+    return await self._retry_request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1594, in _retry_request
+    return await self._request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1524, in _request
+    return await self._retry_request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1594, in _retry_request
+    return await self._request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1534, in _request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 555, in translate_text
+    return await self.translate_with_chagpt(text, source_language, target_language)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 568, in translate_with_chagpt
+    translated_text = await chat_translate.chat(
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\ai_models\chatgpt.py", line 99, in chat
+    raise ExternalAPIError(
+app.core.exceptions.ExternalAPIError: 502: 调用OpenAI API时出错: Connection error.
+2025-03-17 00:06:10 - agents.video_subtitles_agent - ERROR - 处理视频出错: expected string or bytes-like object
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 117, in process_video
+    output_video_path, srt_path = await generate_subtitles(
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\app\utils\subtitle_generator.py", line 168, in generate_subtitles
+    subtitles = await text_to_subtitles(transcript, duration)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\app\utils\subtitle_generator.py", line 82, in text_to_subtitles
+    clean_text = re.sub(r'\s+', ' ', text).strip()
+  File "D:\Users\GM\anaconda3\envs\agent\lib\re.py", line 209, in sub
+    return _compile(pattern, flags).sub(repl, string, count)
+TypeError: expected string or bytes-like object
+2025-03-17 00:12:43 - agents.video_subtitles_agent - INFO - 获取视频 uploads\6304f333-a56f-4696-8993-736fdaca5e91.mp4 的路径
+2025-03-17 00:12:43 - agents.video_subtitles_agent - INFO - 为视频 uploads\6304f333-a56f-4696-8993-736fdaca5e91.mp4 识别语音 (语言: en)
+2025-03-17 00:13:18 - agents.video_subtitles_agent - INFO - 翻译文本 (en -> zh) 
+2025-03-17 00:14:23 - agents.video_subtitles_agent - ERROR - 翻译失败: 502: 调用OpenAI API时出错: Connection error.
+Traceback (most recent call last):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 101, in map_httpcore_exceptions
+    yield
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 394, in handle_async_request
+    resp = await self._pool.handle_async_request(req)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection_pool.py", line 256, in handle_async_request
+    raise exc from None
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection_pool.py", line 236, in handle_async_request
+    response = await connection.handle_async_request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection.py", line 101, in handle_async_request
+    raise exc
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection.py", line 78, in handle_async_request
+    stream = await self._connect(request)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_async\connection.py", line 124, in _connect
+    stream = await self._network_backend.connect_tcp(**kwargs)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_backends\auto.py", line 31, in connect_tcp
+    return await self._backend.connect_tcp(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_backends\anyio.py", line 113, in connect_tcp
+    with map_exceptions(exc_map):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpcore\_exceptions.py", line 14, in map_exceptions
+    raise to_exc(exc) from exc
+httpcore.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1500, in _request
+    response = await self._client.send(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1629, in send
+    response = await self._send_handling_auth(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1657, in _send_handling_auth
+    response = await self._send_handling_redirects(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1694, in _send_handling_redirects
+    response = await self._send_single_request(request)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_client.py", line 1730, in _send_single_request
+    response = await transport.handle_async_request(request)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 393, in handle_async_request
+    with map_httpcore_exceptions():
+  File "D:\Users\GM\anaconda3\envs\agent\lib\contextlib.py", line 153, in __exit__
+    self.gen.throw(typ, value, traceback)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\httpx\_transports\default.py", line 118, in map_httpcore_exceptions
+    raise mapped_exc(message) from exc
+httpx.ConnectError: All connection attempts failed
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\ai_models\chatgpt.py", line 73, in chat
+    chat_completion = await self.openai_client.chat.completions.create(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\resources\chat\completions\completions.py", line 1927, in create
+    return await self._post(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1767, in post
+    return await self.request(cast_to, opts, stream=stream, stream_cls=stream_cls)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1461, in request
+    return await self._request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1524, in _request
+    return await self._retry_request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1594, in _retry_request
+    return await self._request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1524, in _request
+    return await self._retry_request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1594, in _retry_request
+    return await self._request(
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\openai\_base_client.py", line 1534, in _request
+    raise APIConnectionError(request=request) from err
+openai.APIConnectionError: Connection error.
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 555, in translate_text
+    return await self.translate_with_chagpt(text, source_language, target_language)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 568, in translate_with_chagpt
+    translated_text = await chat_translate.chat(
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\ai_models\chatgpt.py", line 99, in chat
+    raise ExternalAPIError(
+app.core.exceptions.ExternalAPIError: 502: 调用OpenAI API时出错: Connection error.
+2025-03-17 00:14:24 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/6304f333-a56f-4696-8993-736fdaca5e91_5416c11f-7d0f-49e5-858f-bc4c445ec32e_subtitled.mp4', 'srt_url': '/static/6304f333-a56f-4696-8993-736fdaca5e91_5416c11f-7d0f-49e5-858f-bc4c445ec32e.srt', 'source_language': 'en', 'target_language': 'zh', 'file_paths': {'video': 'static\\6304f333-a56f-4696-8993-736fdaca5e91_5416c11f-7d0f-49e5-858f-bc4c445ec32e_subtitled.mp4', 'srt': 'static\\6304f333-a56f-4696-8993-736fdaca5e91_5416c11f-7d0f-49e5-858f-bc4c445ec32e.srt'}}
+2025-03-17 00:22:02 - agents.video_subtitles_agent - INFO - 下载TikTok视频: 7448118827402972000
+2025-03-17 00:22:02 - agents.video_subtitles_agent - INFO - 🔍 正在获取视频数据: 7448118827402972000...
+2025-03-17 00:22:04 - agents.video_subtitles_agent - ERROR - 下载TikTok视频失败: 502: 获取TikTok视频时出现未预期错误
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\crawler\video_crawler.py", line 183, in collect_single_video
+    video_data = result.get('data', {}).get('aweme_details', [])[0]
+IndexError: list index out of range
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 387, in download_tiktok_video
+    video_url = await self.get_tiktok_download_url(aweme_id)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 414, in get_tiktok_download_url
+    video_data = await video_crawler.collect_single_video(aweme_id)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\crawler\video_crawler.py", line 199, in collect_single_video
+    raise ExternalAPIError(
+app.core.exceptions.ExternalAPIError: 502: 获取TikTok视频时出现未预期错误
+2025-03-17 00:22:04 - agents.video_subtitles_agent - ERROR - 处理视频出错: 下载TikTok视频失败: 502: 获取TikTok视频时出现未预期错误
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\crawler\video_crawler.py", line 183, in collect_single_video
+    video_data = result.get('data', {}).get('aweme_details', [])[0]
+IndexError: list index out of range
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 387, in download_tiktok_video
+    video_url = await self.get_tiktok_download_url(aweme_id)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 414, in get_tiktok_download_url
+    video_data = await video_crawler.collect_single_video(aweme_id)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\crawler\video_crawler.py", line 199, in collect_single_video
+    raise ExternalAPIError(
+app.core.exceptions.ExternalAPIError: 502: 获取TikTok视频时出现未预期错误
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 99, in process_video
+    video_path = await self.download_tiktok_video(aweme_id, settings.UPLOAD_DIR)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 397, in download_tiktok_video
+    raise Exception(f"下载TikTok视频失败: {str(e)}")
+Exception: 下载TikTok视频失败: 502: 获取TikTok视频时出现未预期错误
+2025-03-17 00:25:10 - agents.video_subtitles_agent - INFO - 获取视频 uploads\20966370-2cdb-4100-b1dc-4a0bd71204b2.mp4 的路径
+2025-03-17 00:25:10 - agents.video_subtitles_agent - INFO - 为视频 uploads\20966370-2cdb-4100-b1dc-4a0bd71204b2.mp4 识别语音 (语言: zh)
+2025-03-17 00:26:10 - agents.video_subtitles_agent - ERROR - Whisper识别失败: 
+Traceback (most recent call last):
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client_reqrep.py", line 1059, in start
+    message, payload = await protocol.read()  # type: ignore[union-attr]
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\streams.py", line 672, in read
+    await self._waiter
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 511, in recognize_with_whisper
+    whisper_result = await wisper.transcriptions(
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\services\ai_models\whisper.py", line 92, in transcriptions
+    async with session.post(url, data=form_data) as response:
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client.py", line 1425, in __aenter__
+    self._resp: _RetType = await self._coro
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client.py", line 730, in _request
+    await resp.start(conn)
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\client_reqrep.py", line 1054, in start
+    with self._timer:
+  File "D:\Users\GM\anaconda3\envs\agent\lib\site-packages\aiohttp\helpers.py", line 671, in __exit__
+    raise asyncio.TimeoutError from exc_val
+asyncio.exceptions.TimeoutError
+2025-03-17 00:26:10 - agents.video_subtitles_agent - INFO - 翻译文本 (zh -> en) 
+2025-03-17 00:26:12 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/20966370-2cdb-4100-b1dc-4a0bd71204b2_956339cb-f4cc-4937-9da9-ee7ff380a4d7_subtitled.mp4', 'srt_url': '/static/20966370-2cdb-4100-b1dc-4a0bd71204b2_956339cb-f4cc-4937-9da9-ee7ff380a4d7.srt', 'source_language': 'zh', 'target_language': 'en', 'file_paths': {'video': 'static\\20966370-2cdb-4100-b1dc-4a0bd71204b2_956339cb-f4cc-4937-9da9-ee7ff380a4d7_subtitled.mp4', 'srt': 'static\\20966370-2cdb-4100-b1dc-4a0bd71204b2_956339cb-f4cc-4937-9da9-ee7ff380a4d7.srt'}}
+2025-03-17 00:29:59 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:29:59 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:30:42 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:30:42 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:36:15 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:36:15 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:36:22 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:36:22 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:58:07 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 00:58:07 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'str' object has no attribute 'filename'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 95, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 59, in save_upload_file
+    _, ext = os.path.splitext(upload_file.filename)
+AttributeError: 'str' object has no attribute 'filename'
+2025-03-17 01:08:16 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'types.SimpleNamespace' object has no attribute 'read'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 96, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 68, in save_upload_file
+    content = await upload_file.read()
+AttributeError: 'types.SimpleNamespace' object has no attribute 'read'
+2025-03-17 01:08:16 - agents.video_subtitles_agent - ERROR - 处理视频出错: 'types.SimpleNamespace' object has no attribute 'read'
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 96, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 68, in save_upload_file
+    content = await upload_file.read()
+AttributeError: 'types.SimpleNamespace' object has no attribute 'read'
+2025-03-17 01:16:11 - agents.video_subtitles_agent - ERROR - 处理视频出错: object bytes can't be used in 'await' expression
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 96, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 68, in save_upload_file
+    content = await upload_file.read()
+TypeError: object bytes can't be used in 'await' expression
+2025-03-17 01:16:11 - agents.video_subtitles_agent - ERROR - 处理视频出错: object bytes can't be used in 'await' expression
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 96, in process_video
+    video_path = await self.save_upload_file(file_path)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 68, in save_upload_file
+    content = await upload_file.read()
+TypeError: object bytes can't be used in 'await' expression
+2025-03-17 01:17:46 - agents.video_subtitles_agent - INFO - 获取视频 uploads\c18bf3ba-f8ce-438a-a4ef-d358bdb9de29.mp4 的路径
+2025-03-17 01:17:46 - agents.video_subtitles_agent - INFO - 为视频 uploads\c18bf3ba-f8ce-438a-a4ef-d358bdb9de29.mp4 识别语音 (语言: zh)
+2025-03-17 01:17:46 - agents.video_subtitles_agent - INFO - 获取视频 uploads\a40a733f-821d-41d5-b781-da19e8ba6896.mp4 的路径
+2025-03-17 01:17:46 - agents.video_subtitles_agent - INFO - 为视频 uploads\a40a733f-821d-41d5-b781-da19e8ba6896.mp4 识别语音 (语言: zh)
+2025-03-17 01:17:50 - agents.video_subtitles_agent - INFO - 翻译文本 (zh -> en) 
+2025-03-17 01:17:50 - agents.video_subtitles_agent - INFO - 翻译文本 (zh -> en) 
+2025-03-17 01:17:52 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/c18bf3ba-f8ce-438a-a4ef-d358bdb9de29_4642d48c-47d7-4964-876d-420a794c874b_subtitled.mp4', 'srt_url': '/static/c18bf3ba-f8ce-438a-a4ef-d358bdb9de29_4642d48c-47d7-4964-876d-420a794c874b.srt', 'source_language': 'zh', 'target_language': 'en', 'file_paths': {'video': 'static\\c18bf3ba-f8ce-438a-a4ef-d358bdb9de29_4642d48c-47d7-4964-876d-420a794c874b_subtitled.mp4', 'srt': 'static\\c18bf3ba-f8ce-438a-a4ef-d358bdb9de29_4642d48c-47d7-4964-876d-420a794c874b.srt'}}
+2025-03-17 01:17:52 - agents.video_subtitles_agent - INFO - 生成结果: {'video_url': '/static/a40a733f-821d-41d5-b781-da19e8ba6896_5657a0e4-a0aa-46d8-9403-c749a6d096e4_subtitled.mp4', 'srt_url': '/static/a40a733f-821d-41d5-b781-da19e8ba6896_5657a0e4-a0aa-46d8-9403-c749a6d096e4.srt', 'source_language': 'zh', 'target_language': 'en', 'file_paths': {'video': 'static\\a40a733f-821d-41d5-b781-da19e8ba6896_5657a0e4-a0aa-46d8-9403-c749a6d096e4_subtitled.mp4', 'srt': 'static\\a40a733f-821d-41d5-b781-da19e8ba6896_5657a0e4-a0aa-46d8-9403-c749a6d096e4.srt'}}
+2025-03-17 01:20:18 - agents.video_subtitles_agent - ERROR - 提取字幕出错: cannot unpack non-iterable NoneType object
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 275, in extract_video_subtitles
+    subtitle_text, srt_path = await extract_subtitles(video_path, settings.OUTPUT_DIR)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\app\utils\subtitle_generator.py", line 230, in extract_subtitles
+    subtitle_text, output_srt = await ocr_extract_subtitles(video_path, output_dir)
+TypeError: cannot unpack non-iterable NoneType object
+2025-03-17 01:22:57 - agents.video_subtitles_agent - ERROR - 提取字幕出错: cannot unpack non-iterable NoneType object
+Traceback (most recent call last):
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\agents\video_subtitles_agent.py", line 275, in extract_video_subtitles
+    subtitle_text, srt_path = await extract_subtitles(video_path, settings.OUTPUT_DIR)
+  File "D:\Downloads\project\Agentfy_project\Agentfy_API\app\utils\subtitle_generator.py", line 230, in extract_subtitles
+    subtitle_text, output_srt = await ocr_extract_subtitles(video_path, output_dir)
+TypeError: cannot unpack non-iterable NoneType object
