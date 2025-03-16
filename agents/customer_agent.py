@@ -259,6 +259,109 @@ class CustomerAgent:
             }
         }
 
+    """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
+    async def _analyze_aspect(
+            self,
+            aspect_type: str,
+            comment_data: List[Dict[str, Any]],
+    ) -> Optional[List[Dict[str, Any]]]:
+        """
+        通用分析方法，根据不同的分析类型调用ChatGPT或Claude AI模型。
+
+        步骤:
+        1. 验证分析类型是否支持
+        2. 构造分析提示
+        3. 调用AI模型进行分析
+        4. 解析并返回分析结果
+
+        Args:
+            aspect_type: 需要分析的类型 (purchase_intent)
+            comment_data: 需要分析的评论列表
+
+        Returns:
+            Optional[List[Dict[str, Any]]]: AI返回的分析结果，失败时抛出异常
+
+        Raises:
+            ValidationError: 当aspect_type无效时
+            ExternalAPIError: 当调用AI服务时出错
+        """
+        try:
+            # 验证分析类型是否支持
+            if aspect_type not in self.analysis_types:
+                raise ValidationError(detail=f"不支持的分析类型: {aspect_type}", field="aspect_type")
+
+            # 检查评论数据是否为空
+            if not comment_data:
+                logger.warning("评论数据为空，跳过分析")
+                return []
+
+            # 获取分析的系统提示和用户提示
+            aspect_config = self.user_prompts[aspect_type]
+            sys_prompt = self.system_prompts[aspect_type]
+            user_prompt = (
+                f"Analyze the {aspect_config['description']} for the following comments:\n"
+                f"{json.dumps(comment_data, ensure_ascii=False)}"
+            )
+
+            # 为避免token限制，限制评论文本长度
+            for comment in comment_data:
+                if 'text' in comment and len(comment['text']) > 1000:
+                    comment['text'] = comment['text'][:997] + "..."
+
+            # 尝试使用ChatGPT进行分析
+            try:
+                response = await self.chatgpt.chat(
+                    system_prompt=sys_prompt,
+                    user_prompt=user_prompt
+                )
+
+                # 解析ChatGPT返回的结果
+                analysis_results = response["choices"][0]["message"]["content"].strip()
+
+            except ExternalAPIError as e:
+                # ChatGPT失败时尝试使用Claude作为备份
+                logger.warning(f"ChatGPT分析失败，尝试使用Claude: {str(e)}")
+                try:
+                    response = await self.claude.chat(
+                        system_prompt=sys_prompt,
+                        user_prompt=user_prompt
+                    )
+                    analysis_results = response["choices"][0]["message"]["content"].strip()
+                except Exception as claude_error:
+                    logger.error(f"Claude分析也失败: {str(claude_error)}")
+                    raise ExternalAPIError(
+                        detail="所有AI服务均无法完成分析",
+                        service="AI"
+                    )
+
+            # 处理返回的JSON格式（可能包含在Markdown代码块中）
+            analysis_results = re.sub(
+                r"```json\n|\n```|```|\n",
+                "",
+                analysis_results.strip()
+            )
+
+            try:
+                analysis_result = json.loads(analysis_results)
+                return analysis_result
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON解析错误: {str(e)}, 原始内容: {analysis_results[:200]}...")
+                raise ExternalAPIError(
+                    detail="AI返回的结果无法解析为JSON",
+                    service="AI",
+                    original_error=e
+                )
+
+        except ValidationError:
+            # 直接向上传递验证错误
+            raise
+        except ExternalAPIError:
+            # 直接向上传递API错误
+            raise
+        except Exception as e:
+            logger.error(f"分析评论方面时发生未预期错误: {str(e)}")
+            raise InternalServerError(f"分析评论方面时发生未预期错误: {str(e)}")
+
     async def generate_analysis_report(self, aweme_id: str, analysis_type: str, data: Dict[str, Any]) -> str:
         """
         生成报告并转换为HTML
@@ -371,6 +474,8 @@ class CustomerAgent:
 
         return html_document
 
+    """---------------------------------------------获取视频评论-----------------------------------------------"""
+
     async def fetch_video_comments(
             self,
             aweme_id: str,
@@ -455,8 +560,9 @@ class CustomerAgent:
             logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
             raise InternalServerError(detail=f"获取视频评论时发生未预期错误: {str(e)}")
 
-    async def get_potential_customers(
+    """---------------------------------------------获取购买意愿客户信息-----------------------------------------"""
 
+    async def stream_potential_customers(
             self,
             aweme_id: str,
             customer_count: int = 100,
@@ -1154,6 +1260,8 @@ class CustomerAgent:
                 'percentages': {}
             }
 
+    """---------------------------------------------生成回复消息-----------------------------------------"""
+
     async def generate_single_reply_message(
             self,
             shop_info: str,
@@ -1316,43 +1424,98 @@ class CustomerAgent:
             logger.error(f"批量生成客户回复消息时发生未预期错误: {str(e)}", exc_info=True)
             raise RuntimeError(f"批量生成客户回复消息时发生未预期错误: {str(e)}")
 
+
 async def main():
-    """主函数，用于测试CustomerAgent功能"""
-    agent = CustomerAgent()
-    # 获取潜在客户
-    #result = await agent.get_keyword_potential_customers("iphone 13", customer_count=400, min_score=50, max_score=100)
+    """测试流式关键词潜在客户功能"""
+    print("开始测试 stream_keyword_potential_customers 方法...")
 
-    # 测试批量生成客户回复消息
-    shop_info = """
-    店铺名称：星辰美妆旗舰店
-    店铺简介：成立于2018年，专注于高品质亚洲美妆产品，主营韩国和日本护肤品、彩妆产品。
-    品牌理念：让每个人都能拥有健康自然的美丽肌肤。
-    售后政策：7天无理由退换，30天质量问题包退换，72小时内发货。
-    优惠活动：每周二会员日9折，新客首单满200减30，全场满399包邮。
-    热销产品：补水面膜系列、轻薄气垫粉底、温和卸妆油。
-    """
-    # 客户消息字典（使用10种不同语言）
-    customer_messages = {
-        "jessica1h": "请问这款气垫粉底适合干皮吗？我皮肤比较干，担心会起皮。",  # 中文
-        "adam_123": "Do you ship internationally? I'd like to order some items to Canada.",  # 英文
-        "yuki_kawaii": "この美容マスクは本当に素晴らしいです！肌がとても潤いました。また購入します！",  # 日语
-        "k_beauty_fan": "이 제품에 알코올이 포함되어 있나요? 제가 알코올에 민감해서요.",  # 韩语
-        "maria_es": "¿Hay alguna promoción especial para el Día de la Madre? Quiero comprar un regalo para mi mamá.",
-        # 西班牙语
-        "pierre75": "J'ai commandé il y a une semaine et je n'ai toujours pas reçu de confirmation d'expédition. C'est inquiétant.",
-        # 法语
-        "deutsch_beauty": "Wie ist Ihre Rückerstattungspolitik, wenn mir ein Produkt nicht gefällt? Muss ich die Versandkosten bezahlen?",
-        # 德语
-        "natasha_r": "Как часто нужно использовать эту сыворотку? Утром и вечером или только один раз в день?",  # 俄语
-        "fatima_beauty": "شكراً جزيلاً على الخدمة الممتازة! وصلت المنتجات بسرعة وكانت بحالة ممتازة.",  # 阿拉伯语
-        "bella_italia": "Quale prodotto consigliate per la pelle mista con tendenza all'acne? Ho bisogno di qualcosa di delicato ma efficace."
-        # 意大利语
-    }
+    # 初始化 CustomerAgent
+    api_key = os.getenv("TIKHUB_API_KEY")
+    if not api_key:
+        print("错误: 未设置 TIKHUB_API_KEY 环境变量")
+        return
 
-    # 生成回复消息
-    result = await agent.generate_customer_reply_messages(shop_info, customer_messages)
-    print(result)
+    agent = CustomerAgent(api_key)
+
+    # 测试关键词列表
+    keywords = [
+        "skincare products",  # 护肤产品
+        #"fitness equipment"  # 健身设备
+    ]
+
+    # 对每个关键词进行测试
+    for keyword in keywords:
+        print(f"\n===== 测试关键词: '{keyword}' =====")
+
+        try:
+            start_time = time.time()
+            batch_count = 0
+            total_customers = 0
+
+            # 流式获取关键词潜在客户
+            async for result in agent.stream_keyword_potential_customers(
+                    keyword=keyword,
+                    customer_count=20,  # 目标客户数量
+                    min_score=50.0,  # 最小参与度分数
+                    max_score=100.0,  # 最大参与度分数
+                    ins_filter=False,  # 不过滤Instagram
+                    twitter_filter=False,  # 不过滤Twitter
+                    region_filter=None  # 不过滤地区
+            ):
+                # 显示批次信息
+                if 'is_complete' in result:
+                    # 这是最终完成的结果
+                    elapsed_time = time.time() - start_time
+                    print(f"\n完成处理 - 总计 {result['total_customers']} 个客户")
+                    print(f"处理了 {result.get('videos_processed')} 个视频 (共 {result.get('total_videos')} 个)")
+                    print(f"总处理时间: {elapsed_time:.2f}秒")
+                    print(f"API报告处理时间: {result.get('processing_time_ms', 0) / 1000:.2f}秒")
+                elif 'error' in result:
+                    # 发生错误
+                    print(f"\n处理出错: {result['error']}")
+                elif 'potential_customers' in result:
+                    # 正常批次结果
+                    batch_count += 1
+                    new_customers = len(result.get('potential_customers', []))
+                    total_customers = result.get('total_count', total_customers + new_customers)
+                    processed_videos = result.get('total_videos_processed', 0)
+                    total_videos = result.get('total_videos', 0)
+
+                    print(f"\n批次 {batch_count}: 获得 {new_customers} 个新客户, 累计: {total_customers}")
+                    print(f"正在处理视频 {processed_videos}/{total_videos}")
+
+                    # 显示这批客户的简要信息
+                    if new_customers > 0:
+                        print("客户信息预览:")
+                        for i, customer in enumerate(result['potential_customers'][:2]):  # 只显示前2个
+                            print(f"  客户 {i + 1}:")
+                            print(f"    ID: {customer.get('commenter_uniqueId', 'N/A')}")
+                            print(f"    评论: {customer.get('text', 'N/A')[:40]}..." if len(
+                                customer.get('text', '')) > 40 else f"    评论: {customer.get('text', 'N/A')}")
+                            print(f"    参与度: {customer.get('engagement_score', 'N/A')}")
+                            print(f"    来源视频: {customer.get('aweme_id', 'N/A')}")
+
+                    # 每5个批次显示一个进度摘要
+                    if batch_count % 5 == 0:
+                        elapsed = time.time() - start_time
+                        print(f"\n--- 进度摘要 ---")
+                        print(f"已处理 {batch_count} 批次，获得 {total_customers} 个客户")
+                        print(f"耗时: {elapsed:.2f}秒，平均每批次 {elapsed / batch_count:.2f}秒")
+                        print(
+                            f"平均每客户 {elapsed / total_customers:.2f}秒" if total_customers > 0 else "尚未获得客户")
+
+        except Exception as e:
+            print(f"测试关键词 '{keyword}' 时出错: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    print("\n测试完成!")
 
 
 if __name__ == "__main__":
+    # 设置异步事件循环策略
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    # 运行测试
     asyncio.run(main())
