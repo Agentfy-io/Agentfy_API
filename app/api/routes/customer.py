@@ -5,6 +5,7 @@
 @auth: Callmeiks
 """
 import json
+import random
 
 from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -44,11 +45,16 @@ async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key
     summary="【一键直达】快速获取指定视频评论数据",
     description="""
 用途:
+  * 后台创建指定Tk视频评论数据获取任务
   * 获取TikTok视频评论数据，返回清洗后的评论列表
+  * 根据自定义过滤器过滤Instagram或Twitter为空的用户，或按地区过滤用户
   * 包括评论ID、评论内容、点赞数、回复数、评论者用户名、评论者安全用户ID(SecUid)、评论语言、评论者国家、Instagram ID、Twitter ID、创建时间
 
 参数:
   * aweme_id: TikTok视频ID
+  * ins_filter: 是否过滤Instagram为空的用户，默认False
+  * twitter_filter: 是否过滤Twitter为空的用户，默认False
+  * region_filter: 按地区过滤用户，默认不过滤
 
 （超高效舆情分析，助您精准捕捉热点！）
 """,
@@ -56,6 +62,7 @@ async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key
 )
 async def fetch_video_comments(
         request: Request,
+        background_tasks: BackgroundTasks,
         aweme_id: str = Query(..., description="TikTok视频ID"),
         ins_filter: Optional[bool] = Query(False, description="是否过滤Instagram为空的用户"),
         twitter_filter: Optional[bool] = Query(False, description="是否过滤Twitter为空的用户"),
@@ -65,109 +72,85 @@ async def fetch_video_comments(
     """
     获取指定TikTok视频的评论数据
 
-    - **aweme_id**: TikTok视频ID
-    - **ins_filter**: 是否过滤Instagram为空的用户，默认为False
-    - **twitter_filter**: 是否过滤Twitter为空的用户，默认为False
-    - **region_filter**: 按地区过滤用户，默认不过滤
-
-    返回清理后的评论列表
+    返回任务ID和初始状态
     """
-    start_time = time.time()
+    # 生成任务ID
+    random_digits = ''.join(str(random.randint(0, 9)) for _ in range(8))
+    task_id = f"customer_{random_digits}_{int(time.time())}"
 
-    try:
-        logger.info(f"获取视频 {aweme_id} 的评论")
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id,
+        "comments": []
+    }
 
-        comments_data = await customer_agent.fetch_video_comments(aweme_id, ins_filter, twitter_filter, region_filter)
+    async def process_video_comments():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在获取视频评论数据...请过10秒+后再查看"
 
-        processing_time = time.time() - start_time
+            all_comments = []
+            start_time = time.time()
 
-        return create_response(
-            data=comments_data,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
+            async for result in customer_agent.fetch_video_comments(
+                    aweme_id=aweme_id,
+                    ins_filter=ins_filter,
+                    twitter_filter=twitter_filter,
+                    region_filter=region_filter
+            ):
+                # 检查是否出错
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    task_results[task_id]["aweme_id"] = result["aweme_id"]
+                    task_results[task_id]["message"] = f"任务失败/只返回已处理数据: {result['error']}"
+                    task_results[task_id]["comments"] = result["comments"]
+                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                    return
 
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+                # 处理批量结果
+                if not result['is_complete']:
+                    all_comments.extend(result['current_batch_comments'])
+                    task_results[task_id]["status"] = "in_progress"
+                    task_results[task_id]["aweme_id"] = result["aweme_id"]
+                    task_results[task_id]["message"] = f"已获取 {len(all_comments)} 条评论"
+                    task_results[task_id]["comments"] = all_comments
+                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+                # 检查任务是否完成
+                if result['is_complete']:
+                    processing_time = round((time.time() - start_time) * 1000, 2)
+                    task_results[task_id]["status"] = "completed"
+                    task_results[task_id]["message"] = f"任务完成，共获取 {len(all_comments)} 条评论"
+                    task_results[task_id]["comments"] = all_comments
+                    task_results[task_id]["processing_time_ms"] = processing_time
+                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                    break
 
-    except Exception as e:
-        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+        except Exception as e:
+            logger.error(f"后台任务处理视频 '{aweme_id}' 潜在客户时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_video_comments)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
 
-@router.post(
-    "/fetch_purchase_intent_stats",
-    summary="【智能剖析】指定视频观众购买意图与统计",
-    description="""
-用途:
-  * 全面洞察视频评论中的购买意向，挖掘潜在商机
-  * 返回购买意图统计数据 (舆情分布图，兴趣等级，购买意向统计）
-  * 返回购买意图分析报告链接（report_url)
-
-参数:
-  * aweme_id: TikTok视频ID
-  * batch_size: 每批处理评论数量，默认30
-  * concurrency: ai处理并发数，默认5，最大10
-
-（助力精确营销，抢占商机先机！）
-""",
-    response_model_exclude_none=True,
-)
-async def analyze_purchase_intent(
-        request: Request,
-        aweme_id: str = Query(..., description="TikTok视频ID"),
-        batch_size: int = Query(30, description="每批处理的评论数量"),
-        concurrency: int = Query(5, description="ai处理并发数"),
-        customer_agent: CustomerAgent = Depends(get_customer_agent)
-):
-    """
-    分析指定TikTok视频评论中的购买意图
-
-    - **aweme_id**: TikTok视频ID
-    - **batch_size**: 每批处理的评论数量，默认为30
-    - **concurrency**: ai处理并发数，默认为5, 最大为10
-
-    返回购买意图分析结果
-    """
-    start_time = time.time()
-
-    try:
-        logger.info(f"分析视频 {aweme_id} 的购买意图")
-
-        result = await customer_agent.get_purchase_intent_stats(
-            aweme_id,
-            batch_size,
-            concurrency
-        )
-
-        processing_time = time.time() - start_time
-
-        return create_response(
-            data=result,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except InternalServerError as e:
-        logger.error(f"内部服务器错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"分析购买意图时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
 @router.post(
     "/stream_potential_customers",
