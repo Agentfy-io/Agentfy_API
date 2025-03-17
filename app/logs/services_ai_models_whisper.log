@@ -1,7 +1,0 @@
-2025-03-16 17:44:53 - services.ai_models.whisper - INFO - Transcription completed, status: 200, format: verbose_json
-2025-03-17 00:01:48 - services.ai_models.whisper - INFO - Transcription completed, status: 200, format: verbose_json
-2025-03-17 00:05:04 - services.ai_models.whisper - ERROR - Unexpected error: 
-2025-03-17 00:13:18 - services.ai_models.whisper - INFO - Transcription completed, status: 200, format: verbose_json
-2025-03-17 00:26:10 - services.ai_models.whisper - ERROR - Unexpected error: 
-2025-03-17 01:17:50 - services.ai_models.whisper - INFO - Transcription completed, status: 200, format: verbose_json
-2025-03-17 01:17:50 - services.ai_models.whisper - INFO - Transcription completed, status: 200, format: verbose_json
