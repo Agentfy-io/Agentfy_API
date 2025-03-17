@@ -403,6 +403,107 @@ async def stream_keyword_potential_customers(
     )
 
 
+@router.post(
+    "/fetch_purchase_intent_analysis",
+    summary="【智能剖析】指定视频观众购买意图与统计",
+    description="""
+用途:
+  * 全面洞察视频评论中的购买意向，挖掘潜在商机
+  * 返回购买意图统计数据 (舆情分布图，兴趣等级，购买意向统计）
+  * 返回购买意图分析报告链接（report_url)
+
+参数:
+  * aweme_id: TikTok视频ID
+  * batch_size: 每批处理评论数量，默认30
+  * concurrency: ai处理并发数，默认5，最大10
+
+（助力精确营销，抢占商机先机！）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_purchase_intent_analysis(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        aweme_id: str = Query(..., description="TikTok视频ID"),
+        batch_size: int = Query(30, description="每批处理的评论数量"),
+        concurrency: int = Query(5, description="ai处理并发数"),
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    创建后台任务分析指定TikTok视频评论中的购买意图
+
+    - **aweme_id**: TikTok视频ID
+    - **batch_size**: 每批处理的评论数量，默认为30
+    - **concurrency**: ai处理并发数，默认为5, 最大为10
+
+    返回购买意图分析结果
+    """
+    # 生成任务ID
+    task_id = f"purchase_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id,
+        "results": []
+    }
+
+    # 定义后台任务
+    async def process_purchase_intent():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在获取视频评论数据...请过10秒+后再查看"
+
+            # 获取购买意图统计数据
+            async for result in customer_agent.fetch_purchase_intent_analysis(
+                aweme_id=aweme_id,
+                batch_size=batch_size,
+                concurrency=concurrency
+            ):
+                task_results[task_id]["aweme_id"] = result["aweme_id"]
+                task_results[task_id]["message"] = result["message"]
+                task_results[task_id]["total_collected_comments"] = result["total_collected_comments"]
+                task_results[task_id]["total_analyzed_comments"] = result["total_analyzed_comments"]
+                task_results[task_id]["analysis_summary"] = result["analysis_summary"],
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    return
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                elif not result['is_complete']:
+                    task_results[task_id]["status"] = "in_progress"
+
+            # 更新任务状态
+            task_results[task_id]["status"] = "completed"
+            task_results[task_id]["message"] = "任务完成，已获取购买意图统计数据"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+        except Exception as e:
+            logger.error(f"后台任务处理视频 '{aweme_id}' 购买意图时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_purchase_intent)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
+
+
 @router.get(
     "/tasks/{task_id}",
     summary="【任务查询】获取后台任务状态与结果",
