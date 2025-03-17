@@ -22,7 +22,7 @@ load_dotenv()
 class CommentCollector:
     """TikTok评论收集器，负责从TikHub API获取视频评论并使用流式处理"""
 
-    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+    def __init__(self, api_key: Optional[str] = None):
         """
         初始化评论收集器
 
@@ -31,8 +31,8 @@ class CommentCollector:
             base_url: TikHub API基础URL，如果不提供则使用环境变量中的默认值
         """
         self.status = True
-        self.api_key = api_key or settings.TIKHUB_API_KEY
-        self.base_url = base_url or settings.TIKHUB_BASE_URL
+        self.api_key = api_key
+        self.base_url = settings.TIKHUB_BASE_URL
 
         if not self.api_key:
             logger.warning("未提供TikHub API密钥，某些功能可能不可用")

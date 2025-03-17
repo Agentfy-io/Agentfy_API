@@ -52,7 +52,7 @@ class CustomerAgent:
         self.claude = Claude()
 
         # 初始化收集器和清洁器
-        self.comment_collector = CommentCollector(tikhub_api_key, settings.TIKHUB_BASE_URL)
+        self.comment_collector = CommentCollector(tikhub_api_key)
         self.comment_cleaner = CommentCleaner()
 
         # 保存TikHub API配置
@@ -510,7 +510,7 @@ class CustomerAgent:
             logger.info(f"🔍 开始获取视频 {aweme_id} 的评论")
 
             # 获取评论
-            comments = await self.comment_collector.collect_video_comments(aweme_id)
+
 
             # 检查是否成功获取评论
             if not comments or not comments.get('comments'):
