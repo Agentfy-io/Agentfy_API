@@ -11,6 +11,7 @@ import sys
 import time
 import asyncio
 from datetime import datetime
+from time import process_time
 from typing import Dict, Any, List, Optional, Union, AsyncGenerator
 
 import numpy as np
@@ -52,7 +53,7 @@ class CustomerAgent:
         self.claude = Claude()
 
         # 初始化收集器和清洁器
-        self.comment_collector = CommentCollector(tikhub_api_key, settings.TIKHUB_BASE_URL)
+        self.comment_collector = CommentCollector(tikhub_api_key)
         self.comment_cleaner = CommentCleaner()
 
         # 保存TikHub API配置
@@ -474,6 +475,92 @@ class CustomerAgent:
 
         return html_document
 
+    def _calculate_engagement_score(
+            self,
+            sentiment: str,
+            purchase_intent: bool,
+            interest_level: str
+    ) -> float:
+        """
+        计算潜在客户的参与度分数
+
+        步骤:
+        1. 标准化输入参数
+        2. 根据情感、购买意图和兴趣水平计算加权得分
+        3. 返回0-100的分数
+
+        Args:
+            sentiment: 情感分析结果 ('positive', 'neutral', 'negative')
+            purchase_intent: 是否有购买意图
+            interest_level: 兴趣水平 ('high', 'medium', 'low')
+
+        Returns:
+            float: 参与度分数 (0-100)
+        """
+        try:
+            # 参数验证和标准化
+            if not isinstance(sentiment, str):
+                sentiment = str(sentiment).lower()
+            else:
+                sentiment = sentiment.lower()
+
+            if not isinstance(purchase_intent, bool):
+                # 尝试转换为布尔值
+                if isinstance(purchase_intent, str):
+                    purchase_intent = purchase_intent.lower() in ['true', '1', 'yes', 't']
+                else:
+                    purchase_intent = bool(purchase_intent)
+
+            if not isinstance(interest_level, str):
+                interest_level = str(interest_level).lower()
+            else:
+                interest_level = interest_level.lower()
+
+            # 修正情感标签
+            if sentiment in ['neg', 'negative']:
+                sentiment = 'negative'
+            elif sentiment in ['pos', 'positive']:
+                sentiment = 'positive'
+            elif sentiment not in ['neutral']:
+                sentiment = 'neutral'  # 默认为中性
+
+            # 处理兴趣水平中值的不同表示
+            if interest_level in ['mid', 'medium']:
+                interest_level = 'medium'
+            elif interest_level not in ['high', 'low']:
+                interest_level = 'low'  # 默认为低兴趣
+
+            # 1. 情感转换 (0-1 scale)
+            sentiment_score = {
+                'positive': 1.0,
+                'neutral': 0.5,
+                'negative': 0.0
+            }.get(sentiment, 0.5)  # 默认为中性
+
+            # 2. 购买意图分数
+            intent_score = 1.0 if purchase_intent else 0.0
+
+            # 3. 兴趣水平分数
+            interest_score = {
+                'high': 1.0,
+                'medium': 0.5,
+                'low': 0.2
+            }.get(interest_level, 0.5)  # 默认为中等
+
+            # 根据加权平均计算潜在价值
+            potential_value = (
+                                      0.3 * sentiment_score +
+                                      0.4 * intent_score +
+                                      0.3 * interest_score
+                              ) * 100  # 缩放到0-100
+
+            return round(potential_value, 2)
+
+        except Exception as e:
+            logger.error(f"计算参与度分数时出错: {str(e)}")
+            # 返回默认值
+            return 0.0
+
     """---------------------------------------------获取视频评论-----------------------------------------------"""
 
     async def fetch_video_comments(
@@ -482,7 +569,7 @@ class CustomerAgent:
             ins_filter: bool = False,
             twitter_filter: bool = False,
             region_filter: Optional[str] = None
-    ) -> Dict[str, Any]:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         获取指定视频的清理后的评论数据
 
@@ -500,6 +587,9 @@ class CustomerAgent:
             ExternalAPIError: 当网络连接失败时
         """
         start_time = time.time()
+        processing_time = 0
+        comments = []
+        total_comments = 0
 
         try:
             # 验证输入参数
@@ -510,55 +600,56 @@ class CustomerAgent:
             logger.info(f"🔍 开始获取视频 {aweme_id} 的评论")
 
             # 获取评论
-            comments = await self.comment_collector.collect_video_comments(aweme_id)
+            async for comment_batch in self.comment_collector.stream_video_comments(aweme_id):
+                # 对每批评论进行清洗
+                cleaned_comments = await self.comment_cleaner.clean_video_comments(comment_batch)
 
-            # 检查是否成功获取评论
-            if not comments or not comments.get('comments'):
-                logger.warning(f"❌ 视频 {aweme_id} 未找到评论")
-                return {
+                # 转换为DataFrame便于处理
+                comments_df = pd.DataFrame(cleaned_comments)
+
+                # 应用过滤条件
+                if ins_filter:
+                    comments_df = comments_df[comments_df['ins_id'] != '']
+                if twitter_filter:
+                    comments_df = comments_df[comments_df['twitter_id'] != '']
+                if region_filter:
+                    comments_df = comments_df[comments_df['commenter_region'] == region_filter]
+
+                # 计算处理时间
+                processing_time = round((time.time() - start_time) * 1000, 2)
+                total_comments += len(comments_df)
+
+                comments.extend(comments_df.to_dict(orient='records'))
+
+                yield {
                     'aweme_id': aweme_id,
-                    'comments': [],
-                    'comment_count': 0,
-                    'timestamp': datetime.now().isoformat()
+                    'is_complete': False,
+                    'current_batch_count': len(comments_df),
+                    'current_batch_comments': comments_df.to_dict(orient='records'),
+                    'comments': comments,
+                    'timestamp': datetime.now().isoformat(),
+                    'processing_time': processing_time
                 }
 
-            # 清洗评论
-            cleaned_comments = await self.comment_cleaner.clean_video_comments(comments)
-            cleaned_comments = cleaned_comments.get('comments', [])
-
-            # 转换为DataFrame便于处理
-            comments_df = pd.DataFrame(cleaned_comments)
-
-            # 应用过滤条件
-            if ins_filter:
-                comments_df = comments_df[comments_df['ins_id'] != '']
-            if twitter_filter:
-                comments_df = comments_df[comments_df['twitter_id'] != '']
-            if region_filter:
-                comments_df = comments_df[comments_df['commenter_region'] == region_filter]
-
-            # 计算处理时间
-            processing_time = time.time() - start_time
-
-            # 准备返回结果
-            result = {
+            # 记录获取评论结束
+            yield {
                 'aweme_id': aweme_id,
-                'comments': comments_df.to_dict(orient='records'),
-                'comment_count': len(comments_df),
+                'is_complete': True,
+                'total_comments': total_comments,
+                'comments': comments,
                 'timestamp': datetime.now().isoformat(),
-                'processing_time_ms': round(processing_time * 1000, 2)
+                'processing_time': processing_time
             }
-
-            logger.info(f"成功获取视频 {aweme_id} 的评论: {len(comments_df)} 条，耗时: {processing_time:.2f}秒")
-            return result
-
-        except (ValidationError, ExternalAPIError) as e:
-            # 直接向上传递这些已处理的错误
-            logger.error(f"获取视频评论时出错: {str(e)}")
-            raise e
         except Exception as e:
             logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
-            raise InternalServerError(detail=f"获取视频评论时发生未预期错误: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'error': str(e),
+                'total_comments': total_comments,
+                'comments': comments,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': processing_time
+            }
 
     """---------------------------------------------获取购买意愿客户信息-----------------------------------------"""
 
@@ -841,153 +932,14 @@ class CustomerAgent:
                 'is_complete': True
             }
 
-
     """---------------------------------------------获取购买意愿报告-----------------------------------------"""
 
-
-    async def analyze_comments_batch(
-            self,
-            df: pd.DataFrame,
-            analysis_type: str,
-            batch_size: int = 30,
-            concurrency: int = 5
-    ) -> pd.DataFrame:
-        """
-        分批分析评论，以防止一次性发送过多数据
-
-        Args:
-            df (pd.DataFrame): 包含评论数据的DataFrame，需包含字段：text
-            analysis_type (str): 选择分析类型 (purchase_intent)
-            batch_size (int, optional): 每批处理的评论数量，默认30
-            concurrency (int, optional): 并发处理的批次数量，默认5
-
-        Returns:
-            pd.DataFrame: 结果合并回原始DataFrame
-
-        Raises:
-            ValidationError: 当analysis_type无效或df为空时
-            InternalServerError: 当分析过程中出现错误时
-        """
-        try:
-            # 参数验证
-            if analysis_type not in self.analysis_types:
-                raise ValidationError(
-                    detail=f"无效的分析类型: {analysis_type}. 请从 {self.analysis_types} 中选择",
-                    field="analysis_type"
-                )
-            if df.empty:
-                raise ValidationError(detail="DataFrame不能为空", field="df")
-
-            if 'text' not in df.columns:
-                raise ValidationError(detail="DataFrame必须包含'text'列", field="df")
-
-            # 验证和调整批处理参数
-            batch_size = min(batch_size, settings.MAX_BATCH_SIZE)
-            concurrency = min(concurrency, 10)  # 限制最大并发数为10
-
-            # 分批处理DataFrame
-            num_splits = max(1, len(df) // batch_size + (1 if len(df) % batch_size > 0 else 0))
-            comment_batches = np.array_split(df, num_splits)
-            logger.info(
-                f"🚀 开始 {analysis_type} 分析，共 {len(comment_batches)} 批，每批约 {len(comment_batches[0]) if len(comment_batches) > 0 else 0} 条评论"
-            )
-
-            # 并发执行任务（每次最多 `concurrency` 组）
-            results = []
-            for i in range(0, len(comment_batches), concurrency):
-                batch_group = comment_batches[i:i + concurrency]
-
-                # 记录当前并发组的范围
-                batch_indices = [
-                    f"{batch.index[0]}-{batch.index[-1]}" if not batch.empty else "-"
-                    for batch in batch_group
-                ]
-                logger.info(
-                    f"⚡ 处理批次 {i + 1} 至 {i + len(batch_group)}，评论索引范围: {batch_indices}"
-                )
-
-                # 并发执行 `concurrency` 个任务
-                tasks = [
-                    self._analyze_aspect(analysis_type, batch[['text', 'comment_id']].to_dict('records'))
-                    for batch in batch_group if not batch.empty
-                ]
-
-                if not tasks:
-                    continue
-
-                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                # 处理结果，过滤掉异常
-                valid_results = []
-                for j, result in enumerate(batch_results):
-                    if isinstance(result, Exception):
-                        logger.error(f"批次 {i + j + 1} 分析失败: {str(result)}")
-                    else:
-                        valid_results.append(result)
-
-                if len(valid_results) != len(batch_group):
-                    logger.warning(
-                        f"批次 {i + 1} 至 {i + len(batch_group)} 中有 {len(batch_group) - len(valid_results)} 个批次分析失败"
-                    )
-
-                results.extend(valid_results)
-
-            # 检查是否有结果
-            if not results:
-                raise InternalServerError("所有批次分析均失败，未获得有效结果")
-
-            # 合并所有分析结果
-            try:
-                # 将所有结果扁平化为单个列表
-                all_results = []
-                for batch_result in results:
-                    if isinstance(batch_result, list):
-                        all_results.extend(batch_result)
-
-                # 创建结果DataFrame
-                analysis_df = pd.DataFrame(all_results)
-
-                # 确保comment_id列存在
-                if 'comment_id' not in analysis_df.columns:
-                    logger.warning("分析结果缺少comment_id列，无法正确合并")
-                    # 添加索引作为临时列
-                    analysis_df['temp_index'] = range(len(analysis_df))
-                    df['temp_index'] = range(len(df))
-                    # 基于索引合并
-                    merged_df = pd.merge(df, analysis_df, on='temp_index', how='left')
-                    merged_df = merged_df.drop('temp_index', axis=1)
-                else:
-                    # 基于comment_id合并
-                    merged_df = pd.merge(df, analysis_df, on='comment_id', how='left')
-
-                # 处理重复的text列
-                if 'text_y' in merged_df.columns:
-                    merged_df = merged_df.drop('text_y', axis=1)
-                    merged_df = merged_df.rename(columns={'text_x': 'text'})
-
-                logger.info(f"✅ {analysis_type} 分析完成！总计 {len(merged_df)} 条数据")
-                return merged_df
-
-            except Exception as e:
-                logger.error(f"合并分析结果时出错: {str(e)}")
-                raise InternalServerError(f"合并分析结果时出错: {str(e)}")
-
-        except ValidationError:
-            # 直接向上传递验证错误
-            raise
-        except InternalServerError:
-            # 直接向上传递内部服务器错误
-            raise
-        except Exception as e:
-            logger.error(f"分析评论时发生未预期错误: {str(e)}")
-            raise InternalServerError(f"分析评论时发生未预期错误: {str(e)}")
-
-    async def get_purchase_intent_stats(
+    async def fetch_purchase_intent_analysis(
             self,
             aweme_id: str,
             batch_size: int = 30,
             concurrency: int = 5
-    ) -> Dict[str, Any]:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         获取指定视频的购买意图统计信息
 
@@ -1004,9 +956,16 @@ class CustomerAgent:
             ExternalAPIError: 当调用外部服务出错时
             InternalServerError: 当内部处理出错时
         """
+
         start_time = time.time()
+        comments = []
+        results = []
+        analysis_summary = {}
+        total_collected_comments = 0
+        total_analyzed_comments = 0
 
         try:
+            # 输入验证
             if not aweme_id:
                 raise ValidationError(detail="aweme_id不能为空", field="aweme_id")
 
@@ -1016,24 +975,174 @@ class CustomerAgent:
                     field="batch_size"
                 )
 
-            # 获取清理后的评论数据
-            comments_data = await self.fetch_video_comments(aweme_id)
-            comments_df = pd.DataFrame(comments_data['comments'])
+            # 流式获取评论
+            async for comments_batch in self.fetch_video_comments(aweme_id):
+                if 'error' not in comments_batch and not comments_batch['is_complete']:
+                    comments.append(comments_batch['current_batch_comments'])
+                    total_collected_comments += comments_batch['current_batch_count']
+                else:
+                    comments = comments_batch.get('comments', [])
+                    total_collected_comments = comments_batch.get('total_comments', 0)
 
+                yield {
+                    'aweme_id': aweme_id,
+                    'is_complete': False,
+                    'total_collected_comments': total_collected_comments,
+                    'total_analyzed_comments': total_analyzed_comments,
+                    'analysis_summary': analysis_summary,
+                    'message': f"正在获取评论: {total_collected_comments} 条",
+                    'timestamp': comments_batch.get('timestamp', datetime.now().isoformat())
+                }
 
-            logger.info(f"开始分析视频 {aweme_id} 的 {len(comments_df)} 条评论")
-            analyzed_df = await self.analyze_comments_batch(
-                comments_df,
-                'purchase_intent',
-                batch_size,
-                concurrency
+            # 数据验证
+            if len(comments) == 0:
+                raise ValidationError(detail="获取到的评论数据为空", field="comments")
+
+            comments_df = pd.DataFrame(comments)
+
+            if 'text' not in comments_df.columns:
+                raise ValidationError(detail="评论数据必须包含'text'列", field="comments")
+
+            # 验证和调整批处理参数
+            batch_size = min(batch_size, settings.MAX_BATCH_SIZE)
+            concurrency = min(concurrency, 10)  # 限制最大并发数为10
+
+            # 分批处理DataFrame
+            num_splits = max(1, len(comments_df) // batch_size + (1 if len(comments_df) % batch_size > 0 else 0))
+            comment_batches = np.array_split(comments_df, num_splits)
+
+            # 避免空批次
+            comment_batches = [batch for batch in comment_batches if not batch.empty]
+
+            if not comment_batches:
+                raise InternalServerError("分割后的批次数据为空")
+
+            avg_batch_size = len(comment_batches[0]) if comment_batches else 0
+
+            # 通知开始分析
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'total_collected_comments': total_collected_comments,
+                'total_analyzed_comments': total_analyzed_comments,
+                'analysis_summary': analysis_summary,
+                'message': f"开始购买意图分析，共 {len(comment_batches)} 批，每批约 {avg_batch_size} 条评论",
+                'timestamp': datetime.now().isoformat()
+            }
+
+            logger.info(
+                f"🚀 开始购买意图分析，共 {len(comment_batches)} 批，每批约 {avg_batch_size} 条评论"
             )
 
-            if analyzed_df.empty:
-                raise InternalServerError(f"分析视频 {aweme_id} 的评论失败")
+            # 批次处理
+            for i in range(0, len(comment_batches), concurrency):
+                batch_group = comment_batches[i:i + concurrency]
+
+                # 记录当前并发组的范围
+                batch_indices = [
+                    f"{batch.index[0]}-{batch.index[-1]}" for batch in batch_group
+                ]
+                logger.info(
+                    f"⚡ 处理批次 {i + 1} 至 {i + len(batch_group)}，评论索引范围: {batch_indices}"
+                )
+
+                # 并发执行批处理任务
+                tasks = [
+                    self._analyze_aspect('purchase_intent', batch[['text', 'comment_id']].to_dict('records'))
+                    for batch in batch_group
+                ]
+
+                batch_results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                # 处理结果，过滤掉异常
+                valid_results = []
+                error_count = 0
+
+                for j, result in enumerate(batch_results):
+                    if isinstance(result, Exception):
+                        error_msg = f"批次 {i + j + 1} 分析失败: {str(result)}"
+                        logger.error(error_msg)
+                        error_count += 1
+                    else:
+                        valid_results.append(result)
+
+                # 只在有错误时才发送错误进度更新
+                if error_count > 0:
+                    yield {
+                        'aweme_id': aweme_id,
+                        'is_complete': False,
+                        'total_collected_comments': total_collected_comments,
+                        'total_analyzed_comments': len(results),
+                        'analysis_summary': analysis_summary,
+                        'message': f"批次 {i + 1} 至 {i + len(batch_group)} 中有 {error_count} 个批次分析失败",
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                # 添加有效结果
+                results.extend(valid_results)
+
+                # 发送进度更新
+                yield {
+                    'aweme_id': aweme_id,
+                    'is_complete': False,
+                    'total_collected_comments': total_collected_comments,
+                    'total_analyzed_comments': len(results),
+                    'analysis_summary': analysis_summary,
+                    'message': f"已分析 {len(results)} 条评论，完成度 {i*concurrency/len(comment_batches)}%",
+                    'timestamp': datetime.now().isoformat()
+                }
+
+            # 合并所有分析结果
+            try:
+                # 将所有结果扁平化为单个列表
+                all_results = []
+                for batch_result in results:
+                    if isinstance(batch_result, list):
+                        all_results.extend(batch_result)
+
+                # 创建结果DataFrame
+                if not all_results:
+                    raise InternalServerError("没有有效的分析结果")
+
+                analysis_df = pd.DataFrame(all_results)
+
+                # 确保必要的列存在
+                if 'comment_id' not in analysis_df.columns:
+                    logger.warning("分析结果缺少comment_id列，使用索引合并")
+                    analysis_df['temp_index'] = range(len(analysis_df))
+                    comments_df['temp_index'] = range(min(len(comments_df), len(analysis_df)))
+                    merged_df = pd.merge(comments_df, analysis_df, on='temp_index', how='left')
+                    merged_df = merged_df.drop('temp_index', axis=1)
+                else:
+                    # 基于comment_id合并
+                    merged_df = pd.merge(comments_df, analysis_df, on='comment_id', how='left')
+
+                # 处理重复的text列
+                if 'text_y' in merged_df.columns:
+                    merged_df = merged_df.drop('text_y', axis=1)
+                    merged_df = merged_df.rename(columns={'text_x': 'text'})
+
+                logger.info(f"✅ 所有购买意向分析完成！总计 {len(merged_df)} 条数据")
+                yield {
+                    'aweme_id': aweme_id,
+                    'is_complete': False,
+                    'total_collected_comments': total_collected_comments,
+                    'total_analyzed_comments': len(merged_df),
+                    'analysis_summary': analysis_summary,
+                    'message': "所有购买意向分析完成, 正在合并结果，准备生成报告，请稍候...",
+                    'timestamp': datetime.now().isoformat()
+                }
+
+            except Exception as e:
+                error_msg = f"合并分析结果时出错: {str(e)}"
+                logger.error(error_msg)
+                raise InternalServerError(error_msg)
+
+            if merged_df.empty:
+                raise InternalServerError(f"分析视频 {aweme_id} 的评论失败，结果为空")
 
             # 根据commenter_uniqueId去重
-            analyzed_df = analyzed_df.drop_duplicates(subset=['commenter_uniqueId'])
+            analyzed_df = merged_df.drop_duplicates(subset=['commenter_uniqueId'])
 
             # 生成分析摘要
             analysis_summary = {
@@ -1049,104 +1158,50 @@ class CustomerAgent:
                 }
             }
 
-            report_url = await self.generate_analysis_report(aweme_id,'purchase_intent_report',analysis_summary)
+            # 生成报告
+            report_url = await self.generate_analysis_report(aweme_id, 'purchase_intent_report', analysis_summary)
             analysis_summary['report_url'] = report_url
 
-            return analysis_summary
+            # 返回最终结果
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'total_collected_comments': total_collected_comments,
+                'total_analyzed_comments': len(analyzed_df),
+                'analysis_summary': analysis_summary,
+                'message': "购买意图分析完成",
+                'timestamp': datetime.now().isoformat()
+            }
 
-        except (ValidationError, ExternalAPIError, InternalServerError):
+        except (ValidationError, ExternalAPIError, InternalServerError) as e:
             # 直接向上传递这些已处理的错误
-            raise
+            logger.error(f"处理过程中发生预期错误: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'error': str(e),
+                'total_collected_comments': total_collected_comments,
+                'total_analyzed_comments': len(results) if 'results' in locals() else 0,
+                'analysis_summary': analysis_summary,
+                'message': f"购买意图分析失败: {str(e)}",
+                'timestamp': datetime.now().isoformat()
+            }
+            return  # 确保生成器在返回错误后停止
         except Exception as e:
-            logger.error(f"获取购买意图统计时发生未预期错误: {str(e)}")
-            raise InternalServerError(f"获取购买意图统计时发生未预期错误: {str(e)}")
-
-
-    def _calculate_engagement_score(
-            self,
-            sentiment: str,
-            purchase_intent: bool,
-            interest_level: str
-    ) -> float:
-        """
-        计算潜在客户的参与度分数
-
-        步骤:
-        1. 标准化输入参数
-        2. 根据情感、购买意图和兴趣水平计算加权得分
-        3. 返回0-100的分数
-
-        Args:
-            sentiment: 情感分析结果 ('positive', 'neutral', 'negative')
-            purchase_intent: 是否有购买意图
-            interest_level: 兴趣水平 ('high', 'medium', 'low')
-
-        Returns:
-            float: 参与度分数 (0-100)
-        """
-        try:
-            # 参数验证和标准化
-            if not isinstance(sentiment, str):
-                sentiment = str(sentiment).lower()
-            else:
-                sentiment = sentiment.lower()
-
-            if not isinstance(purchase_intent, bool):
-                # 尝试转换为布尔值
-                if isinstance(purchase_intent, str):
-                    purchase_intent = purchase_intent.lower() in ['true', '1', 'yes', 't']
-                else:
-                    purchase_intent = bool(purchase_intent)
-
-            if not isinstance(interest_level, str):
-                interest_level = str(interest_level).lower()
-            else:
-                interest_level = interest_level.lower()
-
-            # 修正情感标签
-            if sentiment in ['neg', 'negative']:
-                sentiment = 'negative'
-            elif sentiment in ['pos', 'positive']:
-                sentiment = 'positive'
-            elif sentiment not in ['neutral']:
-                sentiment = 'neutral'  # 默认为中性
-
-            # 处理兴趣水平中值的不同表示
-            if interest_level in ['mid', 'medium']:
-                interest_level = 'medium'
-            elif interest_level not in ['high', 'low']:
-                interest_level = 'low'  # 默认为低兴趣
-
-            # 1. 情感转换 (0-1 scale)
-            sentiment_score = {
-                'positive': 1.0,
-                'neutral': 0.5,
-                'negative': 0.0
-            }.get(sentiment, 0.5)  # 默认为中性
-
-            # 2. 购买意图分数
-            intent_score = 1.0 if purchase_intent else 0.0
-
-            # 3. 兴趣水平分数
-            interest_score = {
-                'high': 1.0,
-                'medium': 0.5,
-                'low': 0.2
-            }.get(interest_level, 0.5)  # 默认为中等
-
-            # 根据加权平均计算潜在价值
-            potential_value = (
-                                      0.3 * sentiment_score +
-                                      0.4 * intent_score +
-                                      0.3 * interest_score
-                              ) * 100  # 缩放到0-100
-
-            return round(potential_value, 2)
-
-        except Exception as e:
-            logger.error(f"计算参与度分数时出错: {str(e)}")
-            # 返回默认值
-            return 0.0
+            # 处理未预期的错误
+            error_msg = f"获取购买意图统计时发生未预期错误: {str(e)}"
+            logger.error(error_msg)
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'error': str(e),
+                'total_collected_comments': total_collected_comments,
+                'total_analyzed_comments': len(results) if 'results' in locals() else 0,
+                'analysis_summary': analysis_summary,
+                'message': f"购买意图分析失败: {str(e)}",
+                'timestamp': datetime.now().isoformat()
+            }
+            return  # 确保生成器在返回错误后停止
 
     def _analyze_sentiment_distribution(self, df: pd.DataFrame) -> Dict[str, Any]:
         """
@@ -1267,7 +1322,7 @@ class CustomerAgent:
             shop_info: str,
             customer_id: str,
             customer_message: str,
-    ) -> Dict[str, Any]:
+    ) -> AsyncGenerator[Dict[str, Any], None]:
         """
         生成单条客户回复消息
 
@@ -1282,6 +1337,8 @@ class CustomerAgent:
             ValueError: 当参数无效时
             RuntimeError: 当分析过程中出现错误时
         """
+        start_time = time.time()
+        reply_message = ""
         try:
             # 参数验证
             if not customer_message:
@@ -1290,6 +1347,13 @@ class CustomerAgent:
             sys_prompt = self.system_prompts['customer_reply']
             user_prompt = f"Here is the shop information:\n{shop_info}\n\nHere is the customer message:\n{customer_message},\n\nPlease generate a reply message for the customer."
 
+            yield {
+                'customer_id': customer_id,
+                'is_complete': False,
+                'reply_message': reply_message,
+                'message': "开始生成回复消息",
+                'timestamp': datetime.now().isoformat()
+            }
             # 生成回复消息
             reply_message = await self.chatgpt.chat(
                 system_prompt=sys_prompt,
@@ -1308,26 +1372,45 @@ class CustomerAgent:
 
             reply_message = json.loads(reply_message)
 
-            return {
+            yield {
                 'customer_id': customer_id,
+                'is_complete': True,
                 'reply_message': reply_message,
+                'message': "回复消息生成完成",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': round((time.time() - start_time) * 1000, 2)
             }
-        except ValueError:
-            # 直接向上传递验证错误
-            raise ValueError
-        except RuntimeError:
-            # 直接向上传递运行时错误
-            raise RuntimeError
+        except (ValueError, RuntimeError) as e:
+            logger.error(f"生成单条客户回复消息时发生错误: {str(e)}")
+            yield {
+                'customer_id': customer_id,
+                'is_complete': True,
+                'error': str(e),
+                'reply_message': reply_message,
+                'message': f"生成回复消息时发生错误: {str(e)}",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': round((time.time() - start_time) * 1000, 2)
+            }
+            raise
         except Exception as e:
             logger.error(f"生成单条客户回复消息时发生未预期错误: {str(e)}")
-            raise RuntimeError(f"生成单条客户回复消息时发生未预期错误: {str(e)}")
+            yield {
+                'customer_id': customer_id,
+                'is_complete': True,
+                'error': str(e),
+                'reply_message': reply_message,
+                'message': f"生成回复消息时发生错误: {str(e)}",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': round((time.time() - start_time) * 1000, 2)
+            }
+            return
 
-    async def generate_customer_reply_messages(
+    async def generate_batch_reply_messages(
             self,
             shop_info: str,
-            customer_messages: Dict[str, str],  # Changed type annotation to match actual input
+            customer_messages: Dict[str, str],
             batch_size: int = 5
-    ) -> List[Dict[str, Any]]:
+    ) -> AsyncGenerator[List[Dict[str, Any]], None]:
         """
         批量生成客户回复消息
 
@@ -1343,6 +1426,8 @@ class CustomerAgent:
             ValueError: 当参数无效时
             RuntimeError: 当分析过程中出现错误时
         """
+        all_replies = []
+        total_replies_count = 0
         try:
             # 参数验证
             if not shop_info:
@@ -1354,19 +1439,19 @@ class CustomerAgent:
             # 转换字典为列表格式
             messages_list = [{"commenter_uniqueId": uid, "text": text} for uid, text in customer_messages.items()]
 
-            # 准备结果列表
-            all_replies = []
-
             logger.info("开始批量生成客户回复消息")
+            yield {
+                'is_complete': False,
+                'message': "开始批量生成客户回复消息",
+                'replies': all_replies,
+                'total_replies_count': total_replies_count,
+                'timestamp': datetime.now().isoformat()
+            }
+
 
             # 按批次处理消息
             for i in range(0, len(messages_list), batch_size):
                 batch = messages_list[i:i + batch_size]
-
-                batch_prompt = {
-                    "shop_info": shop_info,
-                    "messages": batch
-                }
 
                 # 将字典转换为JSON字符串
                 user_prompt = f"here is the shop information:\n{shop_info}\n\nhere are the customer messages:\n{json.dumps(batch, ensure_ascii=False)}"
@@ -1386,7 +1471,6 @@ class CustomerAgent:
                     "",
                     batch_replies.strip()
                 )
-
                 # 解析回复结果
                 try:
                     parsed_replies = json.loads(batch_replies)
@@ -1403,6 +1487,15 @@ class CustomerAgent:
                             reply["commenter_uniqueId"] = batch[message_id].get("commenter_uniqueId")
 
                         all_replies.append(reply)
+                        total_replies_count += 1
+
+                    yield {
+                        'is_complete': False,
+                        'message': f"已生成 {len(all_replies)} 条回复消息， 完成度 {i*batch_size / len(messages_list) * 100:.2f}%",
+                        'total_replies_count': total_replies_count,
+                        'replies': all_replies,
+                        'timestamp': datetime.now().isoformat()
+                    }
 
                 except json.JSONDecodeError as json_err:
                     logger.error(f"无法解析AI返回的JSON结果: {batch_replies[:200]}... (错误: {str(json_err)})")
@@ -1410,19 +1503,37 @@ class CustomerAgent:
 
             logger.info("批量生成客户回复消息完成")
 
-            return all_replies
+            yield {
+                'is_complete': True,
+                'message': "批量生成客户回复消息完成",
+                'total_replies_count': total_replies_count,
+                'replies': all_replies,
+                'timestamp': datetime.now().isoformat()
+            }
 
-        except ValueError as e:
-            logger.warning(f"参数验证错误: {str(e)}")
+        except (ValueError, RuntimeError) as e:
+            logger.error(f"生成单条客户回复消息时发生错误: {str(e)}")
+            yield {
+                'is_complete': True,
+                'error': str(e),
+                'message': f"批量生成回复消息时发生错误: {str(e)}",
+                'total_replies_count': total_replies_count,
+                'replies': all_replies,
+                'timestamp': datetime.now().isoformat()
+            }
             raise
-
-        except RuntimeError as e:
-            logger.error(f"运行时错误: {str(e)}")
-            raise
-
         except Exception as e:
-            logger.error(f"批量生成客户回复消息时发生未预期错误: {str(e)}", exc_info=True)
-            raise RuntimeError(f"批量生成客户回复消息时发生未预期错误: {str(e)}")
+            logger.error(f"生成单条客户回复消息时发生错误: {str(e)}")
+            yield {
+                'is_complete': True,
+                'error': str(e),
+                'message': f"批量生成回复消息时发生错误: {str(e)}",
+                'total_replies_count': total_replies_count,
+                'replies': all_replies,
+                'timestamp': datetime.now().isoformat()
+            }
+            return
+
 
 
 async def main():
