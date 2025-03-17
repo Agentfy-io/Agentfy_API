@@ -504,6 +504,216 @@ async def fetch_purchase_intent_analysis(
     )
 
 
+@router.post(
+    "/generate_single_reply",
+    summary="【AI智答】生成单条客户消息",
+    description="""
+用途:
+  * 后台创建生成单个客户消息回复任务
+  * 根据自定义店铺信息为单个客户消息智能生成个性化回复
+  * 可适用于私信回复、客服回复，评论区回复等场景
+  * 内置强大创意与语言处理能力，支持多语言回复，多种场景类型。
+
+参数:
+  * shop_info: 自定义店铺信息
+  * customer_id: 客户uniqueID
+  * customer_message: 客户消息
+
+（巧妙应对各种询问，让服务升级到"贴心+1"！）
+""",
+    response_model_exclude_none=True,
+)
+async def generate_single_reply(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        shop_info: str = Query(..., description="店铺信息"),
+        customer_id: str = Query(..., description="客户uniqueID"),
+        customer_message: str = Query(..., description="客户消息"),
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    生成单条客户回复消息
+
+    - **shop_info**: 店铺信息
+    - **customer_id**: 客户uniqueID
+    - **customer_message**: 客户消息
+
+    返回生成的客户回复消息
+    """
+    # 生成任务ID
+    task_id = f"reply_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "customer_id": customer_id,
+        "results": []
+    }
+
+    # 定义后台任务
+    async def process_single_reply():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在生成客户回复消息...请过10秒+后再查看"
+
+            # 生成客户回复消息
+            async for result in customer_agent.generate_single_reply_message(
+                shop_info=shop_info,
+                customer_id=customer_id,
+                customer_message=customer_message
+            ):
+                task_results[task_id]["customer_id"] = result["customer_id"]
+                task_results[task_id]["message"] = result["message"]
+                task_results[task_id]["reply_message"] = result["reply_message"]
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    return
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                elif not result['is_complete']:
+                    task_results[task_id]["status"] = "in_progress"
+
+            # 更新任务状态
+            task_results[task_id]["status"] = "completed"
+            task_results[task_id]["message"] = "任务完成，已生成客户回复消息"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+        except Exception as e:
+            logger.error(f"后台任务生成客户 '{customer_id}' 回复消息时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_single_reply)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
+
+@router.post(
+    "/generate_batch_replies",
+    summary="【批量智答】一键生成多条客户回复",
+    description="""
+用途:
+  * 后台创建批量生成客户回复任务
+  * 根据自定义店铺信息为多个客户消息批量生成个性化回复
+  * 可适用于私信回复、客服回复，评论区回复等场景
+  * 内置强大创意与语言处理能力，支持多语言回复，多种场景类型。
+  * 返回生成的回复消息列表
+
+参数:
+  * shop_info: 店铺信息
+  * customer_messages: 客户消息列表，每个包含commenter_uniqueId,text
+  * batch_size: 每批处理消息数量，默认5
+
+（让沟通效率倍增，从此告别重复回复！）
+""",
+    response_model_exclude_none=True,
+)
+async def generate_batch_replies(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        shop_info: str = Query(..., description="店铺信息"),
+        batch_size: int = Query(5, description="每批处理消息数量"),
+        customer_messages: Dict[str, Any] = Body(...,
+                                                 description="客户消息列表，每个包含commenter_uniqueId, comment_id, text",
+                                                 examples=[{
+                                                     "jessica1h": "请问这款气垫粉底适合干皮吗？我皮肤比较干，担心会起皮。",
+                                                     # 中文
+                                                     "adam_123": "Do you ship internationally? I'd like to order some items to Canada.",
+                                                     # 英文
+                                                     "yuki_kawaii": "この美容マスクは本当に素晴らしいです！肌がとても潤いました。また購入します！",
+                                                     # 日语
+                                                     "k_beauty_fan": "이 제품에 알코올이 포함되어 있나요? 제가 알코올에 민감해서요.",  # 韩语
+                                                 }]
+                                                 ),
+        customer_agent: CustomerAgent = Depends(get_customer_agent)
+):
+    """
+    批量生成客户回复消息
+
+    - **shop_info**: 店铺信息
+    - **customer_messages**: 客户消息列表，每个包含commenter_uniqueId, comment_id, text
+    - **batch_size**: 每批处理消息数量，默认为5
+
+    返回生成的客户回复消息列表
+    """
+    # 生成任务ID
+    task_id = f"batch_reply_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "results": []
+    }
+
+    # 定义后台任务
+    async def process_batch_replies():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在生成客户回复消息...请过10秒+后再查看"
+
+            # 生成客户回复消息
+            async for result in customer_agent.generate_batch_reply_messages(
+                shop_info=shop_info,
+                customer_messages=customer_messages,
+                batch_size=batch_size
+            ):
+                task_results[task_id]["message"] = result["message"]
+                task_results[task_id]["total_replies_count"] = result["total_replies_count"]
+                task_results[task_id]["replies"] = result["replies"]
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    return
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                elif not result['is_complete']:
+                    task_results[task_id]["status"] = "in_progress"
+
+            # 更新任务状态
+            task_results[task_id]["status"] = "completed"
+            task_results[task_id]["message"] = "任务完成，已生成客户回复消息"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+        except Exception as e:
+            logger.error(f"后台任务生成客户回复消息时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_batch_replies)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
+
+
 @router.get(
     "/tasks/{task_id}",
     summary="【任务查询】获取后台任务状态与结果",

@@ -640,11 +640,6 @@ class CustomerAgent:
                 'timestamp': datetime.now().isoformat(),
                 'processing_time': processing_time
             }
-
-        except (ValidationError, ExternalAPIError) as e:
-            # 直接向上传递这些已处理的错误
-            logger.error(f"获取视频评论时出错: {str(e)}")
-            raise e
         except Exception as e:
             logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
             yield {
@@ -1093,7 +1088,7 @@ class CustomerAgent:
                     'total_collected_comments': total_collected_comments,
                     'total_analyzed_comments': len(results),
                     'analysis_summary': analysis_summary,
-                    'message': f"已分析 {len(results)} 条评论，完成度 {min(100, int(len(results) / total_collected_comments * 100))}%",
+                    'message': f"已分析 {len(results)} 条评论，完成度 {i*concurrency/len(comment_batches)}%",
                     'timestamp': datetime.now().isoformat()
                 }
 
@@ -1128,6 +1123,15 @@ class CustomerAgent:
                     merged_df = merged_df.rename(columns={'text_x': 'text'})
 
                 logger.info(f"✅ 所有购买意向分析完成！总计 {len(merged_df)} 条数据")
+                yield {
+                    'aweme_id': aweme_id,
+                    'is_complete': False,
+                    'total_collected_comments': total_collected_comments,
+                    'total_analyzed_comments': len(merged_df),
+                    'analysis_summary': analysis_summary,
+                    'message': "所有购买意向分析完成, 正在合并结果，准备生成报告，请稍候...",
+                    'timestamp': datetime.now().isoformat()
+                }
 
             except Exception as e:
                 error_msg = f"合并分析结果时出错: {str(e)}"
@@ -1183,7 +1187,6 @@ class CustomerAgent:
                 'timestamp': datetime.now().isoformat()
             }
             return  # 确保生成器在返回错误后停止
-
         except Exception as e:
             # 处理未预期的错误
             error_msg = f"获取购买意图统计时发生未预期错误: {str(e)}"
@@ -1311,6 +1314,226 @@ class CustomerAgent:
                 'counts': {},
                 'percentages': {}
             }
+
+    """---------------------------------------------生成回复消息-----------------------------------------"""
+
+    async def generate_single_reply_message(
+            self,
+            shop_info: str,
+            customer_id: str,
+            customer_message: str,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        生成单条客户回复消息
+
+        Args:
+            shop_info (str): 店铺信息
+            customer_id (str): 客户uniqueID
+            customer_message (str): 客户消息
+        Returns:
+            Dict[str, Any]: 生成的回复消息
+
+        Raises:
+            ValueError: 当参数无效时
+            RuntimeError: 当分析过程中出现错误时
+        """
+        start_time = time.time()
+        reply_message = ""
+        try:
+            # 参数验证
+            if not customer_message:
+                raise ValueError("customer_message不能为空")
+
+            sys_prompt = self.system_prompts['customer_reply']
+            user_prompt = f"Here is the shop information:\n{shop_info}\n\nHere is the customer message:\n{customer_message},\n\nPlease generate a reply message for the customer."
+
+            yield {
+                'customer_id': customer_id,
+                'is_complete': False,
+                'reply_message': reply_message,
+                'message': "开始生成回复消息",
+                'timestamp': datetime.now().isoformat()
+            }
+            # 生成回复消息
+            reply_message = await self.chatgpt.chat(
+                system_prompt=sys_prompt,
+                user_prompt=user_prompt,
+                temperature=0.7,
+            )
+
+            # 解析回复消息
+            reply_message = reply_message["choices"][0]["message"]["content"].strip()
+            # 解析json
+            reply_message = re.sub(
+                r"```json\n|\n```",
+                "",
+                reply_message.strip()
+            )  # 去除Markdown代码块
+
+            reply_message = json.loads(reply_message)
+
+            yield {
+                'customer_id': customer_id,
+                'is_complete': True,
+                'reply_message': reply_message,
+                'message': "回复消息生成完成",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': round((time.time() - start_time) * 1000, 2)
+            }
+        except (ValueError, RuntimeError) as e:
+            logger.error(f"生成单条客户回复消息时发生错误: {str(e)}")
+            yield {
+                'customer_id': customer_id,
+                'is_complete': True,
+                'error': str(e),
+                'reply_message': reply_message,
+                'message': f"生成回复消息时发生错误: {str(e)}",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': round((time.time() - start_time) * 1000, 2)
+            }
+            raise
+        except Exception as e:
+            logger.error(f"生成单条客户回复消息时发生未预期错误: {str(e)}")
+            yield {
+                'customer_id': customer_id,
+                'is_complete': True,
+                'error': str(e),
+                'reply_message': reply_message,
+                'message': f"生成回复消息时发生错误: {str(e)}",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time': round((time.time() - start_time) * 1000, 2)
+            }
+            return
+
+    async def generate_batch_reply_messages(
+            self,
+            shop_info: str,
+            customer_messages: Dict[str, str],
+            batch_size: int = 5
+    ) -> AsyncGenerator[List[Dict[str, Any]], None]:
+        """
+        批量生成客户回复消息
+
+        Args:
+            shop_info (str): 店铺信息
+            customer_messages (Dict[str, str]): 客户消息字典, 键为用户ID, 值为消息内容
+            batch_size (int, optional): 每批处理的客户消息数量. 默认为5.
+
+        Returns:
+            List[Dict[str, Any]]: 生成的回复消息列表, 每个回复包含语言检测和回复内容
+
+        Raises:
+            ValueError: 当参数无效时
+            RuntimeError: 当分析过程中出现错误时
+        """
+        all_replies = []
+        total_replies_count = 0
+        try:
+            # 参数验证
+            if not shop_info:
+                raise ValueError("店铺信息不能为空")
+
+            if not customer_messages:
+                raise ValueError("客户消息字典不能为空")
+
+            # 转换字典为列表格式
+            messages_list = [{"commenter_uniqueId": uid, "text": text} for uid, text in customer_messages.items()]
+
+            logger.info("开始批量生成客户回复消息")
+            yield {
+                'is_complete': False,
+                'message': "开始批量生成客户回复消息",
+                'replies': all_replies,
+                'total_replies_count': total_replies_count,
+                'timestamp': datetime.now().isoformat()
+            }
+
+
+            # 按批次处理消息
+            for i in range(0, len(messages_list), batch_size):
+                batch = messages_list[i:i + batch_size]
+
+                # 将字典转换为JSON字符串
+                user_prompt = f"here is the shop information:\n{shop_info}\n\nhere are the customer messages:\n{json.dumps(batch, ensure_ascii=False)}"
+
+                # 调用AI生成回复
+                batch_replies = await self.chatgpt.chat(
+                    system_prompt=self.system_prompts['batch_customer_reply'],
+                    user_prompt=user_prompt,
+                    temperature=0.7
+                )
+
+                # 解析AI回复
+                batch_replies = batch_replies["choices"][0]["message"]["content"].strip()
+                # 解析JSON
+                batch_replies = re.sub(
+                    r"```json\n|\n```",
+                    "",
+                    batch_replies.strip()
+                )
+                # 解析回复结果
+                try:
+                    parsed_replies = json.loads(batch_replies)
+
+                    # 验证回复格式
+                    if not isinstance(parsed_replies, list):
+                        raise ValueError("AI返回的结果格式错误，应为列表")
+
+                    # 将批次回复添加到总结果中
+                    for reply in parsed_replies:
+                        # 确保uniqueID在回复中
+                        message_id = reply.get("message_id")
+                        if message_id is not None and 0 <= message_id < len(batch):
+                            reply["commenter_uniqueId"] = batch[message_id].get("commenter_uniqueId")
+
+                        all_replies.append(reply)
+                        total_replies_count += 1
+
+                    yield {
+                        'is_complete': False,
+                        'message': f"已生成 {len(all_replies)} 条回复消息， 完成度 {i*batch_size / len(messages_list) * 100:.2f}%",
+                        'total_replies_count': total_replies_count,
+                        'replies': all_replies,
+                        'timestamp': datetime.now().isoformat()
+                    }
+
+                except json.JSONDecodeError as json_err:
+                    logger.error(f"无法解析AI返回的JSON结果: {batch_replies[:200]}... (错误: {str(json_err)})")
+                    raise RuntimeError(f"AI返回的结果不是有效的JSON格式: {str(json_err)}")
+
+            logger.info("批量生成客户回复消息完成")
+
+            yield {
+                'is_complete': True,
+                'message': "批量生成客户回复消息完成",
+                'total_replies_count': total_replies_count,
+                'replies': all_replies,
+                'timestamp': datetime.now().isoformat()
+            }
+
+        except (ValueError, RuntimeError) as e:
+            logger.error(f"生成单条客户回复消息时发生错误: {str(e)}")
+            yield {
+                'is_complete': True,
+                'error': str(e),
+                'message': f"批量生成回复消息时发生错误: {str(e)}",
+                'total_replies_count': total_replies_count,
+                'replies': all_replies,
+                'timestamp': datetime.now().isoformat()
+            }
+            raise
+        except Exception as e:
+            logger.error(f"生成单条客户回复消息时发生错误: {str(e)}")
+            yield {
+                'is_complete': True,
+                'error': str(e),
+                'message': f"批量生成回复消息时发生错误: {str(e)}",
+                'total_replies_count': total_replies_count,
+                'replies': all_replies,
+                'timestamp': datetime.now().isoformat()
+            }
+            return
+
 
 
 async def main():
