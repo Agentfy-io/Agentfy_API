@@ -6,6 +6,7 @@
 """
 import json
 import random
+import string
 
 from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body, BackgroundTasks
 from fastapi.responses import StreamingResponse
@@ -74,9 +75,9 @@ async def fetch_video_comments(
 
     返回任务ID和初始状态
     """
+
     # 生成任务ID
-    random_digits = ''.join(str(random.randint(0, 9)) for _ in range(8))
-    task_id = f"customer_{random_digits}_{int(time.time())}"
+    task_id = f"comment_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
     # 初始化任务状态
     task_results[task_id] = {
@@ -151,32 +152,33 @@ async def fetch_video_comments(
     )
 
 
-
 @router.post(
     "/stream_potential_customers",
     summary="【实时挖掘】流式获取视频潜在客户",
     description="""
 用途:
-  * 实时流式获取TikTok视频的潜在客户
-  * 即时返回分析结果，无需等待全部处理完成
-  * 可用于大型视频或需要实时展示结果的场景
+  * 后台创建视频潜在客户挖掘任务
+  * 适用于大型数据挖掘需求，无需等待API响应
+  * 返回任务ID，可通过任务ID查询进度和结果
   * 返回潜在客户信息流（用户名、ID、评论内容、国家、社交媒体ID、参与度分数）
 
 参数:
-  * aweme_id: TikTok视频ID
+  * aweme_id: 视频ID
   * customer_count: 最大返回客户数量，默认100
-  * min_score: 最小购买意向分数，范围0-100，默认50
-  * max_score: 最大购买意向分数，范围1-100，默认100
+  * min_score: 最小参与度分数，范围0-100，默认50
+  * max_score: 最大参与度分数，范围1-100，默认100
   * ins_filter: 是否过滤Instagram为空的用户，默认False
   * twitter_filter: 是否过滤Twitter为空的用户，默认False
   * region_filter: 按地区过滤用户，默认不过滤
 
-（实时洞察用户意向，快速响应市场需求！）
+（后台处理视频评论，挖掘高价值潜在客户，提升转化率！）
 """,
+    response_model_exclude_none=True,
 )
 async def stream_potential_customers(
         request: Request,
-        aweme_id: str = Query(..., description="TikTok视频ID"),
+        background_tasks: BackgroundTasks,
+        aweme_id: str = Query(..., description="视频ID"),
         customer_count: int = Query(100, description="最大返回客户数量"),
         min_score: float = Query(50.0, description="最小参与度分数，范围0-100"),
         max_score: float = Query(100.0, description="最大参与度分数，范围1-100"),
@@ -186,14 +188,34 @@ async def stream_potential_customers(
         customer_agent: CustomerAgent = Depends(get_customer_agent)
 ):
     """
-    流式获取TikTok视频的潜在客户
+    创建后台任务获取视频潜在客户
 
-    返回NDJSON格式的流式响应，每行是一个JSON对象
+    返回任务ID和初始状态
     """
-    logger.info(f"流式获取视频 {aweme_id} 的潜在客户")
+    # 生成任务ID
+    task_id = f"customer_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
-    async def generate():
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id,
+        "potential_customers": []
+    }
+
+    # 定义后台任务
+    async def process_video_customers():
         try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在获取视频评论数据...请过10秒+后再查看"
+
+            # 收集所有客户
+            all_customers = []
+            start_time = time.time()
+
+            # 使用流式API
             async for result in customer_agent.stream_potential_customers(
                     aweme_id=aweme_id,
                     customer_count=customer_count,
@@ -203,115 +225,66 @@ async def stream_potential_customers(
                     twitter_filter=twitter_filter,
                     region_filter=region_filter
             ):
-                # 添加时间戳
-                result['timestamp'] = datetime.now().isoformat()
-                # 转换为JSON字符串并添加换行符
-                yield json.dumps(result) + "\n"
+                # 检查是否出错
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    task_results[task_id]["aweme_id"] = result["aweme_id"]
+                    task_results[task_id]["message"] = f"任务失败/只返回已处理数据: {result['error']}"
+                    task_results[task_id]["potential_customers"] = result["potential_customers"]
+                    task_results[task_id]["customer_count"] = result["customer_count"]
+                    task_results[task_id]["processing_time_ms"] = result.get("processing_time_ms", 0)
+                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                    return
+
+                # 处理批量结果并检查是否完成
+                if 'current_batch_customers' in result:
+                    all_customers.extend(result['current_batch_customers'])
+                    task_results[task_id]["status"] = "in_progress"
+                    task_results[task_id]["aweme_id"] = result["aweme_id"]
+                    task_results[task_id]["message"] = f"已获取 {len(all_customers)} 个潜在客户"
+                    task_results[task_id]["potential_customers"] = all_customers
+                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+                # 检查任务是否完成
+                if result.get('is_complete', False):
+                    processing_time = round((time.time() - start_time) * 1000, 2)
+                    task_results[task_id]["status"] = "completed"
+                    task_results[task_id]["message"] = f"任务完成，共获取 {len(all_customers)} 个潜在客户"
+                    task_results[task_id]["customer_count"] = len(all_customers)
+                    task_results[task_id]["processing_time_ms"] = processing_time
+                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                    break
+
         except Exception as e:
-            logger.error(f"流式获取潜在客户时出错: {str(e)}")
-            error_payload = {
-                'error': str(e),
-                'aweme_id': aweme_id,
-                'timestamp': datetime.now().isoformat()
-            }
-            yield json.dumps(error_payload) + "\n"
+            logger.error(f"后台任务处理视频 '{aweme_id}' 潜在客户时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
-    return StreamingResponse(
-        generate(),
-        media_type="application/x-ndjson",
-        headers={
-            "X-Content-Type-Options": "nosniff",
-            "Cache-Control": "no-cache"
-        }
+    # 添加后台任务
+    background_tasks.add_task(process_video_customers)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
     )
-
 
 @router.post(
     "/stream_keyword_potential_customers",
-    summary="【关键词流挖】实时获取关键词潜在客户",
+    summary="【关键词流挖】实时获取自定义赛道潜在客户",
     description="""
 用途:
-  * 实时流式获取指定关键词相关视频的潜在客户
-  * 并发处理多个视频，即时返回分析结果
-  * 适用于大规模数据挖掘或需要实时展示结果的场景
-  * 返回流式潜在客户信息（关键词、客户列表、视频来源、统计数据）
-
-参数:
-  * keyword: 搜索关键词
-  * customer_count: 最大返回客户数量，默认100
-  * video_concurrency: 视频处理并发数，默认5
-  * min_score: 最小购买意向分数，范围0-100，默认50
-  * max_score: 最大购买意向分数，范围1-100，默认100
-  * ins_filter: 是否过滤Instagram为空的用户，默认False
-  * twitter_filter: 是否过滤Twitter为空的用户，默认False
-  * region_filter: 按地区过滤用户，默认不过滤
-
-（在海量视频中实时锁定目标客户，迅速抢占市场先机！）
-""",
-)
-async def stream_keyword_potential_customers(
-        request: Request,
-        keyword: str = Query(..., description="搜索关键词"),
-        customer_count: int = Query(100, description="最大返回客户数量"),
-        video_concurrency: int = Query(5, description="视频处理并发数"),
-        min_score: float = Query(50.0, description="最小购买意向分数，范围0-100"),
-        max_score: float = Query(100.0, description="最大购买意向分数，范围1-100"),
-        ins_filter: bool = Query(False, description="是否过滤Instagram为空的用户"),
-        twitter_filter: bool = Query(False, description="是否过滤Twitter为空的用户"),
-        region_filter: Optional[str] = Query(None, description="按地区过滤用户"),
-        customer_agent: CustomerAgent = Depends(get_customer_agent)
-):
-    """
-    流式获取关键词相关视频的潜在客户
-
-    返回NDJSON格式的流式响应，每行是一个JSON对象
-    """
-    logger.info(f"流式获取关键词 '{keyword}' 相关视频的潜在客户")
-
-    async def generate():
-        try:
-            async for result in customer_agent.stream_keyword_potential_customers(
-                    keyword=keyword,
-                    customer_count=customer_count,
-                    video_concurrency=video_concurrency,
-                    min_score=min_score,
-                    max_score=max_score,
-                    ins_filter=ins_filter,
-                    twitter_filter=twitter_filter,
-                    region_filter=region_filter
-            ):
-                # 添加时间戳
-                result['timestamp'] = datetime.now().isoformat()
-                # 转换为JSON字符串并添加换行符
-                yield json.dumps(result) + "\n"
-        except Exception as e:
-            logger.error(f"流式获取关键词潜在客户时出错: {str(e)}")
-            error_payload = {
-                'error': str(e),
-                'keyword': keyword,
-                'timestamp': datetime.now().isoformat()
-            }
-            yield json.dumps(error_payload) + "\n"
-
-    return StreamingResponse(
-        generate(),
-        media_type="application/x-ndjson",
-        headers={
-            "X-Content-Type-Options": "nosniff",
-            "Cache-Control": "no-cache"
-        }
-    )
-
-
-@router.post(
-    "/create_keyword_customers_task",
-    summary="【后台任务】创建关键词客户挖掘任务",
-    description="""
-用途:
-  * 后台创建关键词潜在客户挖掘任务
+  * 后台创建关键词/指定赛道潜在客户挖掘任务
   * 适用于大型数据挖掘需求，无需等待API响应
-  * 返回任务ID，可通过任务ID查询进度和结果
   * 支持高并发处理多个视频
+  * 流式分析潜在客户信息（关键词、客户列表、视频来源、统计数据）
+  * 返回任务ID，可通过任务ID查询进度和结果
 
 参数:
   * keyword: 搜索关键词
@@ -327,7 +300,7 @@ async def stream_keyword_potential_customers(
 """,
     response_model_exclude_none=True,
 )
-async def create_keyword_customers_task(
+async def stream_keyword_potential_customers(
         request: Request,
         background_tasks: BackgroundTasks,
         keyword: str = Query(..., description="搜索关键词"),
@@ -345,7 +318,7 @@ async def create_keyword_customers_task(
     返回任务ID和初始状态
     """
     # 生成任务ID
-    task_id = f"keyword_{keyword}_{int(time.time())}"
+    task_id = f"customer_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
     # 初始化任务状态
     task_results[task_id] = {
@@ -417,130 +390,6 @@ async def create_keyword_customers_task(
 
     # 添加后台任务
     background_tasks.add_task(process_keyword_customers)
-
-    # 返回任务信息
-    return create_response(
-        data={
-            "task_id": task_id,
-            "status": "pending",
-            "message": "任务已创建，正在启动",
-            "timestamp": datetime.now().isoformat()
-        },
-        success=True
-    )
-
-
-@router.post(
-    "/create_video_customers_task",
-    summary="【后台任务】创建视频客户挖掘任务",
-    description="""
-用途:
-  * 后台创建视频潜在客户挖掘任务
-  * 适用于大型数据挖掘需求，无需等待API响应
-  * 返回任务ID，可通过任务ID查询进度和结果
-  * 支持实时分析大量评论数据
-
-参数:
-  * aweme_id: 视频ID
-  * customer_count: 最大返回客户数量，默认100
-  * min_score: 最小参与度分数，范围0-100，默认50
-  * max_score: 最大参与度分数，范围1-100，默认100
-  * ins_filter: 是否过滤Instagram为空的用户，默认False
-  * twitter_filter: 是否过滤Twitter为空的用户，默认False
-  * region_filter: 按地区过滤用户，默认不过滤
-
-（后台处理视频评论，挖掘高价值潜在客户，提升转化率！）
-""",
-    response_model_exclude_none=True,
-)
-async def create_video_customers_task(
-        request: Request,
-        background_tasks: BackgroundTasks,
-        aweme_id: str = Query(..., description="视频ID"),
-        customer_count: int = Query(100, description="最大返回客户数量"),
-        min_score: float = Query(50.0, description="最小参与度分数，范围0-100"),
-        max_score: float = Query(100.0, description="最大参与度分数，范围1-100"),
-        ins_filter: bool = Query(False, description="是否过滤Instagram为空的用户"),
-        twitter_filter: bool = Query(False, description="是否过滤Twitter为空的用户"),
-        region_filter: Optional[str] = Query(None, description="按地区过滤用户"),
-        customer_agent: CustomerAgent = Depends(get_customer_agent)
-):
-    """
-    创建后台任务获取视频潜在客户
-
-    返回任务ID和初始状态
-    """
-    # 生成任务ID
-    task_id = f"video_{aweme_id}_{int(time.time())}"
-
-    # 初始化任务状态
-    task_results[task_id] = {
-        "status": "pending",
-        "message": "任务已创建，正在启动",
-        "timestamp": datetime.now().isoformat(),
-        "aweme_id": aweme_id,
-        "potential_customers": []
-    }
-
-    # 定义后台任务
-    async def process_video_customers():
-        try:
-            # 更新任务状态
-            task_results[task_id]["status"] = "processing"
-            task_results[task_id]["message"] = "正在获取视频评论数据...请过10秒+后再查看"
-
-            # 收集所有客户
-            all_customers = []
-            start_time = time.time()
-
-            # 使用流式API
-            async for result in customer_agent.stream_potential_customers(
-                    aweme_id=aweme_id,
-                    customer_count=customer_count,
-                    min_score=min_score,
-                    max_score=max_score,
-                    ins_filter=ins_filter,
-                    twitter_filter=twitter_filter,
-                    region_filter=region_filter
-            ):
-                # 检查是否出错
-                if 'error' in result:
-                    task_results[task_id]["status"] = "failed"
-                    task_results[task_id]["aweme_id"] = result["aweme_id"]
-                    task_results[task_id]["message"] = f"任务失败/只返回已处理数据: {result['error']}"
-                    task_results[task_id]["potential_customers"] = result["potential_customers"]
-                    task_results[task_id]["customer_count"] = result["customer_count"]
-                    task_results[task_id]["processing_time_ms"] = result.get("processing_time_ms", 0)
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
-                    return
-
-                # 处理批量结果并检查是否完成
-                if 'current_batch_customers' in result:
-                    all_customers.extend(result['current_batch_customers'])
-                    task_results[task_id]["status"] = "in_progress"
-                    task_results[task_id]["aweme_id"] = result["aweme_id"]
-                    task_results[task_id]["message"] = f"已获取 {len(all_customers)} 个潜在客户"
-                    task_results[task_id]["potential_customers"] = all_customers
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
-
-                # 检查任务是否完成
-                if result.get('is_complete', False):
-                    processing_time = round((time.time() - start_time) * 1000, 2)
-                    task_results[task_id]["status"] = "completed"
-                    task_results[task_id]["message"] = f"任务完成，共获取 {len(all_customers)} 个潜在客户"
-                    task_results[task_id]["customer_count"] = len(all_customers)
-                    task_results[task_id]["processing_time_ms"] = processing_time
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
-                    break
-
-        except Exception as e:
-            logger.error(f"后台任务处理视频 '{aweme_id}' 潜在客户时出错: {str(e)}")
-            task_results[task_id]["status"] = "failed"
-            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
-            task_results[task_id]["timestamp"] = datetime.now().isoformat()
-
-    # 添加后台任务
-    background_tasks.add_task(process_video_customers)
 
     # 返回任务信息
     return create_response(

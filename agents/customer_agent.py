@@ -475,6 +475,92 @@ class CustomerAgent:
 
         return html_document
 
+    def _calculate_engagement_score(
+            self,
+            sentiment: str,
+            purchase_intent: bool,
+            interest_level: str
+    ) -> float:
+        """
+        计算潜在客户的参与度分数
+
+        步骤:
+        1. 标准化输入参数
+        2. 根据情感、购买意图和兴趣水平计算加权得分
+        3. 返回0-100的分数
+
+        Args:
+            sentiment: 情感分析结果 ('positive', 'neutral', 'negative')
+            purchase_intent: 是否有购买意图
+            interest_level: 兴趣水平 ('high', 'medium', 'low')
+
+        Returns:
+            float: 参与度分数 (0-100)
+        """
+        try:
+            # 参数验证和标准化
+            if not isinstance(sentiment, str):
+                sentiment = str(sentiment).lower()
+            else:
+                sentiment = sentiment.lower()
+
+            if not isinstance(purchase_intent, bool):
+                # 尝试转换为布尔值
+                if isinstance(purchase_intent, str):
+                    purchase_intent = purchase_intent.lower() in ['true', '1', 'yes', 't']
+                else:
+                    purchase_intent = bool(purchase_intent)
+
+            if not isinstance(interest_level, str):
+                interest_level = str(interest_level).lower()
+            else:
+                interest_level = interest_level.lower()
+
+            # 修正情感标签
+            if sentiment in ['neg', 'negative']:
+                sentiment = 'negative'
+            elif sentiment in ['pos', 'positive']:
+                sentiment = 'positive'
+            elif sentiment not in ['neutral']:
+                sentiment = 'neutral'  # 默认为中性
+
+            # 处理兴趣水平中值的不同表示
+            if interest_level in ['mid', 'medium']:
+                interest_level = 'medium'
+            elif interest_level not in ['high', 'low']:
+                interest_level = 'low'  # 默认为低兴趣
+
+            # 1. 情感转换 (0-1 scale)
+            sentiment_score = {
+                'positive': 1.0,
+                'neutral': 0.5,
+                'negative': 0.0
+            }.get(sentiment, 0.5)  # 默认为中性
+
+            # 2. 购买意图分数
+            intent_score = 1.0 if purchase_intent else 0.0
+
+            # 3. 兴趣水平分数
+            interest_score = {
+                'high': 1.0,
+                'medium': 0.5,
+                'low': 0.2
+            }.get(interest_level, 0.5)  # 默认为中等
+
+            # 根据加权平均计算潜在价值
+            potential_value = (
+                                      0.3 * sentiment_score +
+                                      0.4 * intent_score +
+                                      0.3 * interest_score
+                              ) * 100  # 缩放到0-100
+
+            return round(potential_value, 2)
+
+        except Exception as e:
+            logger.error(f"计算参与度分数时出错: {str(e)}")
+            # 返回默认值
+            return 0.0
+
     """---------------------------------------------获取视频评论-----------------------------------------------"""
 
     async def fetch_video_comments(
