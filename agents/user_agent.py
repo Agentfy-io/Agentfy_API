@@ -452,5 +452,130 @@ class UserAgent:
                 "processing_time": round(time.time() - start_time, 2)
             }
 
+    async def fetch_user_posts_stats(self, url: str, max_post: Optional[int]) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        分析用户/达人的发布作品统计
+        """
+        post_count = 0
+        start_time = time.time()
+        posts_data = []
+        posts_stats = {}
+        total_posts = await self.user_collector.fetch_total_posts_count(url)
+        max_post = min(max_post, total_posts)
+
+        logger.info("📊 正在分析发布作品统计...")
+        try:
+            # 采集用户发布的作品数据
+            async for posts in self.user_collector.collect_user_posts(url):
+                cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
+                if cleaned_posts:
+                    if post_count+ len(cleaned_posts) <= max_post:
+                        posts_data.extend(cleaned_posts)
+                        post_count += len(cleaned_posts)
+                        yield{
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据, 进度: {post_count}/{max_post}...',
+                            'total_posts': total_posts,
+                            'posts_stats': posts_stats,
+                            'posts_data': posts_data,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                    else:
+                        posts_data.extend(cleaned_posts[:max_post - post_count])
+                        post_count = max_post
+                        logger.info(f"已采集{post_count}条作品数据, 完成")
+                        break
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(posts_data)
+
+            # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
+            df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
+            # 按照最近发布时间排序
+            df = df.sort_values("create_time")
+            df["day"] = df["create_time"].dt.date
+
+            stats = {
+                "total_posts": int(df.shape[0]),
+                "average_collects": float(df["collect_count"].mean()),
+                "average_likes": float(df["digg_count"].mean()),
+                "average_downloads": float(df["download_count"].mean()),
+                "average_views": float(df["play_count"].mean()),
+                "average_comments": float(df["comment_count"].mean()),
+                "average_shares": float(df["share_count"].mean()),
+                "average_whatsapp_shares": float(df["whatsapp_share_count"].mean()),
+                "total_likes": int(df["digg_count"].sum()),
+                "total_comments": int(df["comment_count"].sum()),
+                "total_shares": int(df["share_count"].sum()),
+                "total_whatsapp_shares": int(df["whatsapp_share_count"].sum()),
+                "total_views": int(df["play_count"].sum()),
+                "total_downloads": int(df["download_count"].sum()),
+                "total_ai_videos": int(df["created_by_ai"].eq(True).sum()),
+                "total_vr_videos": int(df["is_vr"].eq(True).sum()),
+                "total_ads_videos": int(df["is_ads"].eq(True).sum()),
+                "total_ec_videos": int(df["is_ec_video"].eq(1).sum()),
+                "total_risk_videos": int((df["in_reviewing"] & df["is_prohibited"]).sum()),
+                "total_recommendation_videos": int(df["is_nff_or_nr"].eq(False).sum()),
+                "total_professional_generated_videos": int(df["is_pgcshow"].eq(True).sum()),
+                "highest_likes": {
+                    "count": int(df["digg_count"].max()),
+                    "video": str(df.loc[df["digg_count"].idxmax()]["aweme_id"]),
+                    "publish_date": str(df.loc[df["digg_count"].idxmax()]["create_time"])
+                },
+                "highest_comments": {
+                    "count": int(df["comment_count"].max()),
+                    "video": str(df.loc[df["comment_count"].idxmax()]["aweme_id"]),
+                    "publish_date": str(df.loc[df["comment_count"].idxmax()]["create_time"])
+                },
+                "highest_shares": {
+                    "count": int(df["share_count"].max()),
+                    "video": str(df.loc[df["share_count"].idxmax()]["aweme_id"]),
+                    "publish_date": str(df.loc[df["share_count"].idxmax()]["create_time"])
+                },
+                "highest_downloads": {
+                    "count": int(df["download_count"].max()),
+                    "video": str(df.loc[df["download_count"].idxmax()]["aweme_id"]),
+                    "publish_date": str(df.loc[df["download_count"].idxmax()]["create_time"])
+                },
+                "highest_views": {
+                    "count": int(df["play_count"].max()),
+                    "video": str(df.loc[df["play_count"].idxmax()]["aweme_id"]),
+                    "publish_date": str(df.loc[df["play_count"].idxmax()]["create_time"])
+                },
+                "highest_whatsapp_shares": int(df["whatsapp_share_count"].max()),
+                "average_video_duration": float(round(df["duration"].mean() / 1000, 2)),
+                "post_per_day": float(df["day"].value_counts().mean()),
+                "post_per_week": float(df["day"].value_counts().mean() * 7),
+                "latest_week_post_count": {str(k): int(v) for k, v in
+                                           df["day"].value_counts().head(7).to_dict().items()}
+            }
+
+            logger.info(f"已完成用户 {url} 发布作品统计分析")
+
+            yield {
+                'user_profile_url': url,
+                'is_complete': True,
+                'message': f'已完成发布作品统计分析',
+                'total_posts': total_posts,
+                'posts_stats': stats,
+                'posts_data': posts_data,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
+        except Exception as e:
+            logger.error(f"分析指定用户发布作品统计时发生错误: {str(e)}")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'error': str(e),
+                'message': f"分析发布作品统计时发生错误: {str(e)}",
+                'total_posts': total_posts,
+                'posts_stats': posts_stats,
+                'posts_data': posts_data,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
+
     asyncio.run(main())
 

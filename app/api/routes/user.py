@@ -124,6 +124,97 @@ async def fetch_user_profile_analysis(
     )
 
 
+@router.post(
+    "/fetch_user_posts_stats",
+    summary="【一键直达】全面分析TikTok用户/达人发布作品统计",
+    description="""
+用途:
+  * 后台创建指定TikTok用户/达人作品统计分析任务
+  * 采集并分析用户/达人的所有发布作品数据
+  * 计算关键统计指标，包括平均互动数据、最高表现视频、发布频率等
+  * 支持限制分析的最大作品数量
+
+参数:
+  * url: TikTok用户主页URL，格式为https://tiktok.com/@username
+  * max_post: 最多分析的作品数量，可选，默认分析全部作品
+
+（深度内容分析，助您全面了解创作者表现！）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_user_posts_stats(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        url: str = Query(..., description="TikTok用户主页URL"),
+        max_post: Optional[int] = Query(description="最多分析的作品数量，默认分析全部作品"),
+        user_agent: UserAgent = Depends(get_user_agent)
+):
+    """
+    分析TikTok用户/达人的发布作品统计
+
+    返回任务ID和初始状态
+    """
+
+    # 生成任务ID
+    task_id = f"posts_stats_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "url": url,
+        "total_post": 0,
+        "posts_data": [],
+        "posts_stats": {}
+    }
+
+    async def process_user_posts_stats():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在分析用户/达人发布作品统计...请过10秒+后再查看"
+
+            # 直接调用提供的方法进行数据采集和分析
+            async for result in user_agent.fetch_user_posts_stats(url, max_post):
+                task_results[task_id]["message"] = result['message']
+                task_results[task_id]["total_posts"] = result['total_posts']
+                task_results[task_id]["posts_data"] = result['posts_data']
+                task_results[task_id]["posts_stats"] = result['posts_stats']
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                # 处理进度更新
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    break
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                else:
+                    task_results[task_id]["status"] = "pending"
+        except Exception as e:
+            logger.error(f"后台任务处理用户 '{url}' 发布作品统计时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+
+    # 添加后台任务
+    background_tasks.add_task(process_user_posts_stats)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
+
+
 
 @router.get(
     "/tasks/{task_id}",
