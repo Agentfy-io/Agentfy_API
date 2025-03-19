@@ -331,6 +331,41 @@ class UserAgent:
             6. Include visual descriptions of trends that would be useful for the content creator.
             
             7. Present the data in a way that's accessible and actionable for the content creator.""",
+            "post_duration_and_time": """# System Prompt: Video Content Distribution Visualization
+            You are a data visualization specialist focusing on content creator analytics. Your task is to create and explain tables that visualize the distribution patterns in the provided data.
+            ## Instructions:
+            
+            1. Parse the provided JSON data containing two key distribution metrics:
+               - Video duration distribution (how long the videos are)
+               - Publishing time distribution (when videos are published during the day)
+            
+            2. Create two clear and visually distinct table:
+               - Table 1: Video Duration Distribution
+               - Table 2: Publishing Time Distribution
+            
+            3. For each Table:
+               - Use an appropriate color scheme that differentiates segments clearly
+               - Include percentage labels on each segment
+               - Add a clear title and legend
+               - Ensure the segments are ordered logically (e.g., duration from shortest to longest)
+            
+            4. Provide a brief analysis of each chart, highlighting:
+               - The most common video duration
+               - The preferred publishing time
+               - Any notable patterns or imbalances in the distribution
+            
+            5. Suggest actionable insights based on the data, such as:
+               - Optimal video length based on current patterns
+               - Best times to publish for increased engagement
+               - Potential opportunities in underutilized duration ranges or time slots
+            
+            6. Format your response as a well-structured markdown document with:
+               - Clear headings
+               - Tables formatted for readability
+               - Analysis text separated from code
+               - A concise summary
+            
+            7. Ensure your visualization code is complete and ready to execute with the provided data.
         }
 
     """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
@@ -779,15 +814,62 @@ class UserAgent:
             }
             return
 
-    async def analyze_post_duration_distribution(self, **kwargs) -> Dict[str, Any]:
+    async def fetch_post_duration_and_time_distribution(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析用户/达人的发布作品时长分布
         """
-        logger.info("📊 正在分析发布作品时长分布...")
-        data = kwargs.get('data')
+        logger.info("正在分析发布作品的时长分布以及时间分布...")
+        start_time = time.time()
+        post_count = 0
+        posts_raw_data = []
+        duration_distribution = time_distribution = {}
+        total_posts = await self.user_collector.fetch_total_posts_count(url)
         try:
+            # 采集用户发布的作品数据
+            async for posts in self.user_collector.collect_user_posts(url):
+                cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
+                if cleaned_posts:
+                    post_count += len(cleaned_posts)
+                    if post_count <= total_posts:
+                        posts_raw_data.extend(cleaned_posts)
+                        yield {
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
+                            'total_posts': total_posts,
+                            # 'posts_raw_data': posts_raw_data,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                    elif post_count > total_posts:
+                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        post_count = total_posts
+                        logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
+                        yield {
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
+                            'total_posts': total_posts,
+                            # 'posts_raw_data': posts_raw_data,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                        break
+                else:
+                    logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
+                    yield {
+                        'user_profile_url': url,
+                        'is_complete': False,
+                        'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
+                        'total_posts': total_posts,
+                        # 'posts_raw_data': posts_raw_data,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'processing_time': round(time.time() - start_time, 2)
+                    }
+                    break
+
             # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
+            df = pd.DataFrame(posts_raw_data)
 
             # 将视频时长从毫秒转换为秒
             df["duration"] = df["duration"] / 1000
@@ -799,22 +881,6 @@ class UserAgent:
 
             # 统计每个时长区间的视频数量
             duration_distribution = df["duration_range"].value_counts().to_dict()
-            return duration_distribution
-
-        except Exception as e:
-            logger.error(f"❌ 分析发布作品时长分布时发生错误: {str(e)}")
-            raise
-
-    async def analyze_post_time_distribution(self, **kwargs) -> Dict[str, Any]:
-        """
-        分析用户/达人的发布作品时间分布
-        """
-        logger.info("📊 正在分析发布作品时间分布...")
-
-        data = kwargs.get('data')
-        try:
-            # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
 
             # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
             df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
@@ -822,15 +888,47 @@ class UserAgent:
 
             # 只根据小时提取时间，24小时制，0-5点为凌晨，6-11点为上午，12-17点为下午，18-23点为晚上
             df["hour"] = df["create_time"].dt.hour
-            df["hour_range"] = pd.cut(df["hour"], bins=[0, 6, 12, 18, 24], labels=["凌晨", "上午", "下午", "晚上"])
+            df["hour_range"] = pd.cut(df["hour"], bins=[0, 6, 12, 18, 24], labels=["Dawn/Early Morning", "Morning", "Afternoon", "Evening"])
 
             # 统计每个时间段的视频数量
             time_distribution = df["hour_range"].value_counts().to_dict()
-            return time_distribution
+
+            distributions = {
+                "duration_distribution": duration_distribution,
+                "time_distribution": time_distribution
+            }
+            print(json.dumps(distributions, indent=4))
+
+            uniqueId = url.split("@")[-1]
+
+            report_url = await self.generate_analysis_report(uniqueId, 'post_duration_and_time', distributions)
+
+            yield {
+                'user_profile_url': url,
+                'is_complete': True,
+                'message': f'已完成发布作品时长分布和时间分布分析',
+                'report_url': report_url,
+                'total_posts': total_posts,
+                'duration_distribution': duration_distribution,
+                'time_distribution': time_distribution,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
         except Exception as e:
-            logger.error(f"❌ 分析发布作品时间分布时发生错误: {str(e)}")
-            raise
+            logger.error(f"分析发布作品时长分布时发生错误: {str(e)}")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'error': str(e),
+                'message': f"分析发布作品时长分布时发生错误: {str(e)}",
+                'total_posts': total_posts,
+                'duration_distribution': duration_distribution,
+                'time_distribution': time_distribution,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
+            return
 
     async def analyze_hashtags(self, **kwargs) -> dict[str, Any]:
         """
