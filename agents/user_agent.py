@@ -267,9 +267,6 @@ class UserAgent:
             - **用户互动**
             - **跨平台引流**
             ---
-
-
-
             """,
             "post_stats_analysis": """
                 # System Prompt: TikTok Analytics Report Generator        
@@ -300,6 +297,40 @@ class UserAgent:
                 When you receive the JSON data, parse it carefully and organize the information logically in your report. Pay special attention to highlighting notable patterns, outliers, and potential opportunities for improvement.     
                 Your report should be comprehensive enough to provide value but concise enough to be quickly digestible. Aim for a report that would take 3-5 minutes to read thoroughly.
                 """,
+            "post_trend_analysis": """# System Prompt: Social Media Performance Analysis
+
+            You are a data analyst specializing in social media analytics. Your task is to transform the provided JSON data into a readable format and conduct an insightful analysis.
+    
+            ## Instructions:
+            
+            1. Parse the JSON data containing post trends and interaction metrics.
+            2. Create a well-formatted markdown table with the following columns (YOU MUST INCLUDE ALL DATES):
+               - Date
+               - Post Count
+               - Digg Count (Likes)
+               - Comment Count
+               - Share Count
+               - Play Count (Views)
+            
+            3. Calculate and highlight key performance metrics:
+               - Days with highest post frequency
+               - Days with highest engagement metrics (diggs, comments, shares, plays)
+               - Weekly and monthly trends
+               - Ratio of interactions to posts
+               - Engagement rate calculation
+            
+            4. Produce a comprehensive report with the following sections:
+               - Executive Summary (overall performance)
+               - Content Performance (post frequency and timing analysis)
+               - Audience Engagement (interaction metrics analysis)
+               - Key Insights (highlighting notable patterns and anomalies)
+               - Recommendations (based on data patterns)
+            
+            5. Format the report professionally with proper headings, bullet points, and emphasis on key findings.
+            
+            6. Include visual descriptions of trends that would be useful for the content creator.
+            
+            7. Present the data in a way that's accessible and actionable for the content creator.""",
         }
 
     """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
@@ -610,7 +641,7 @@ class UserAgent:
                 'processing_time': round(time.time() - start_time, 2)
             }
 
-    async def fetch_user_posts_trend(self, url: str, time_interval:str = '30D') -> Dict[str, Any]:
+    async def fetch_user_posts_trend(self, url: str, time_interval:str = '90D') -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析用户/达人的发布作品趋势
 
@@ -625,12 +656,8 @@ class UserAgent:
         """
         post_count = 0
         start_time = time.time()
-        posts_data = []
+        posts_raw_data = []
         total_posts = await self.user_collector.fetch_total_posts_count(url)
-
-        # 计算时间范围 - 使用当前时间作为结束时间
-        end_date = pd.Timestamp.now()
-        start_date = end_date - pd.Timedelta(time_interval)
 
         logger.info("正在分析发布作品趋势统计...")
 
@@ -638,28 +665,48 @@ class UserAgent:
             # 采集用户发布的作品数据
             async for posts in self.user_collector.collect_user_posts(url):
                 cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
-                # 把这个list里面create_time 从timestamp 秒转换为日期, 只保留 end_date - start_date 之间的数据
-                cleaned_posts = [post for post in cleaned_posts if start_date <= pd.to_datetime(post["create_time"], unit='s') <= end_date]
                 if cleaned_posts:
-                    posts_data.extend(cleaned_posts)
                     post_count += len(cleaned_posts)
-                    yield{
+                    if post_count <= total_posts:
+                        posts_raw_data.extend(cleaned_posts)
+                        yield{
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
+                            'total_posts': total_posts,
+                            #'posts_raw_data': posts_raw_data,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                    elif post_count > total_posts:
+                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        post_count = total_posts
+                        logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
+                        yield {
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
+                            'total_posts': total_posts,
+                            #'posts_raw_data': posts_raw_data,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                        break
+                else:
+                    logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
+                    yield {
                         'user_profile_url': url,
                         'is_complete': False,
-                        'message': f'已采集{post_count}条作品数据...',
+                        'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
                         'total_posts': total_posts,
-                        'posts_stats': posts_stats,
-                        'posts_data': posts_data,
+                        #'posts_raw_data': posts_raw_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
-                else:
-                    logger.info(f"已采集{post_count}条作品数据, 完成")
                     break
 
-
             # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
+            df = pd.DataFrame(posts_raw_data)
 
             # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
             df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
@@ -701,12 +748,36 @@ class UserAgent:
                     for metric in interaction_metrics
                 }
             }
+            # 将trend data 用json格式保存
+            # print(json.dumps(trends_data, indent=4))
+            uniqueId = url.split("@")[-1]
 
-            return trends_data
+            report_url= await self.generate_analysis_report(uniqueId, 'post_trend_analysis', trends_data)
+
+            yield{
+                'user_profile_url': url,
+                'is_complete': True,
+                'message': f'已完成发布作品趋势分析',
+                'report_url': report_url,
+                'total_posts': total_posts,
+                #'posts_raw_data': posts_raw_data,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
         except Exception as e:
-            logger.error(f"❌ 分析发布趋势时发生错误: {str(e)}")
-            raise
+            logger.error(f"分析发布趋势时发生错误: {str(e)}")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'error': str(e),
+                'message': f"分析发布趋势时发生错误: {str(e)}",
+                'total_posts': total_posts,
+                'posts_raw_data': posts_raw_data,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
+            return
 
     async def analyze_post_duration_distribution(self, **kwargs) -> Dict[str, Any]:
         """
