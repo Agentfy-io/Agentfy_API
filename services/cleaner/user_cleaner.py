@@ -170,7 +170,6 @@ class UserCleaner:
         """
 
         try:
-            logger.info(f"🔍 开始清洗用户帖子数据")
             # 转换为DataFrame
             df = pd.json_normalize(posts_data)
 
@@ -249,13 +248,13 @@ class UserCleaner:
             result = result.to_dict(orient='records')
 
 
-            logger.info(f"✅ 清洗用户帖子数据完成")
+            logger.info(f"清洗用户帖子数据完成")
 
             return result
 
         except Exception as e:
-            logger.error(f"❌ 清洗用户帖子数据时发生错误: {str(e)}")
-            raise
+            logger.error(f"清洗用户帖子数据时发生错误: {str(e)}")
+            return {}
 
 
 async def main():

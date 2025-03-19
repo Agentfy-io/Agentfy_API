@@ -284,7 +284,7 @@ class UserCollector:
                     if new_fans:
                         fans.extend(new_fans)
                         total_collected_fans += len(new_fans)
-                        logger.info(f"🚀 已收集 {total_collected_fans}/{total_fans} 个粉丝 - URL: {url}")
+                        logger.info(f"已收集 {total_collected_fans}/{total_fans} 个粉丝 - URL: {url}")
                         yield new_fans
 
                     if has_more == False or len(fans) >= total_fans:
@@ -350,7 +350,7 @@ class UserCollector:
                     if new_posts:
                         total_collected_posts += len(new_posts)
                         posts.extend(new_posts)
-                        logger.info(f"🚀 已收集 {total_collected_posts}/{total_posts} 个视频 - 用户: {unique_id}")
+                        logger.info(f"已收集 {total_collected_posts}/{total_posts} 个视频 - 用户: {unique_id}")
                         yield new_posts
 
                     maxCursor = data['max_cursor']

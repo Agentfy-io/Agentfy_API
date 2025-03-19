@@ -1,8 +1,6 @@
 import asyncio
-import json
-from typing import Dict, List, Any, Optional, Union, AsyncGenerator
+from typing import Dict, List, Any, Optional, AsyncGenerator
 import aiohttp
-import os
 from dotenv import load_dotenv
 
 from app.config import settings
@@ -28,7 +26,6 @@ class CommentCollector:
 
         Args:
             api_key: TikHub API密钥，如果不提供则使用环境变量中的默认值
-            base_url: TikHub API基础URL，如果不提供则使用环境变量中的默认值
         """
         self.status = True
         self.api_key = api_key

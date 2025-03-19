@@ -18,3 +18,4 @@
 /services/cleaner/logs
 /services/__pycache__
 /app/api/__pycache__
+/agents/reports
