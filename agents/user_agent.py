@@ -1075,15 +1075,95 @@ class UserAgent:
                 'processing_time': round(time.time() - start_time, 2)
             }
 
-    async def analyze_hot_videos(self, **kwargs) -> Dict[str, Any]:
+    async def fetch_post_creator_analysis(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        获取用户/达人的前5热门视频, 和置顶视频，并且调用video analyzer进行分析
+        综合分析创作者视频，包括热门视频、广告/带货视频、AI/VR视频、风险视频
+
+        Args:
+            url: 用户个人主页URL
+
+        Yields:
+            Dict: 各个阶段的分析结果，视频信息仅包含aweme_id, desc, download_addr, create_time
         """
+        logger.info("🔍 开始全面分析创作者视频数据...")
+        start_time = time.time()
+        post_count = 0
+        posts_raw_data = []
+        analysis_results = {}
+
         try:
-            logger.info("📊 正在获取热门视频数据...")
-            data = kwargs.get('data')
+            # 获取用户总发布作品数
+            total_posts = await self.user_collector.fetch_total_posts_count(url)
+
+            # 采集用户发布的作品数据
+            async for posts in self.user_collector.collect_user_posts(url):
+                cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
+                if cleaned_posts:
+                    post_count += len(cleaned_posts)
+                    if post_count <= total_posts:
+                        posts_raw_data.extend(cleaned_posts)
+                        yield {
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
+                            'total_posts': total_posts,
+                            'analysis_results': analysis_results,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                    elif post_count > total_posts:
+                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        post_count = total_posts
+                        logger.info(f"已采集{post_count}条作品数据, 准备开始分析...")
+                        yield {
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据, 准备开始分析...',
+                            'total_posts': total_posts,
+                            'analysis_results': analysis_results,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                        break
+                else:
+                    logger.info(f"已采集{post_count}条作品数据, 准备开始分析...")
+                    yield {
+                        'user_profile_url': url,
+                        'is_complete': False,
+                        'message': f'已采集{post_count}条作品数据, 准备开始分析...',
+                        'total_posts': total_posts,
+                        'analysis_results': analysis_results,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'processing_time': round(time.time() - start_time, 2)
+                    }
+                    break
+
             # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
+            df = pd.DataFrame(posts_raw_data)
+
+            # 定义一个函数，用于简化视频数据，只保留指定字段
+            def simplify_video_data(videos_list):
+                simplified_videos = []
+                for video in videos_list:
+                    simplified_videos.append({
+                        'aweme_id': video.get('aweme_id'),
+                        'desc': video.get('desc'),
+                        'download_addr': video.get('download_addr'),
+                        'create_time': video.get('create_time')
+                    })
+                return simplified_videos
+
+            # 1. 分析热门视频
+            logger.info("📊 正在分析热门视频...")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'message': '正在分析热门视频...',
+                'total_posts': total_posts,
+                'analysis_results': analysis_results,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
             # 获取热门视频，按照点赞数排序，取前5
             hot_videos_digg = df.sort_values("digg_count", ascending=False).head(5).to_dict(orient="records")
@@ -1102,100 +1182,138 @@ class UserAgent:
             seen_ids = set()
 
             for video in hot_videos_digg + hot_videos_views + hot_videos_comments + hot_videos_shares:
-                video_id = video['aweme_id']  # Replace 'id' with whatever unique identifier your dictionaries use
+                video_id = video['aweme_id']
                 if video_id not in seen_ids:
                     seen_ids.add(video_id)
                     hot_videos.append(video)
 
+            # 简化热门视频数据
+            simplified_hot_videos = simplify_video_data(hot_videos)
+
             # 获取置顶视频
             top_videos = df[df["is_top"].eq(True)].to_dict(orient="records")
 
-            return {
-                "hot_videos": hot_videos,
-                "top_videos": top_videos,
-                "top_videos_count": len(top_videos)
+            # 简化置顶视频数据
+            simplified_top_videos = simplify_video_data(top_videos)
+
+            analysis_results["hot_videos"] = {
+                "hot_videos": simplified_hot_videos,
+                "top_videos": simplified_top_videos,
+                "top_videos_count": len(simplified_top_videos)
             }
 
-        except Exception as e:
-            logger.error(f"❌ 获取热门视频数据时发生错误: {str(e)}")
-            raise
-
-    async def analyze_commerce_videos(self, **kwargs) -> Dict[str, Any]:
-        """
-        获取用户/达人的广告视频，并且调用video analyzer进行分析
-        """
-
-        try:
-            logger.info("📊 正在获取广告/带货视频数据...")
-            data = kwargs.get('data')
-            # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
+            # 2. 分析广告/带货视频
+            logger.info("📊 正在分析广告/带货视频...")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'message': '正在分析广告/带货视频...',
+                'total_posts': total_posts,
+                'analysis_results': analysis_results,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
             # 获取广告视频
             ads_videos = df[df["is_ads"].eq(True)].to_dict(orient="records")
 
+            # 简化广告视频数据
+            simplified_ads_videos = simplify_video_data(ads_videos)
+
             # 获取电商视频
             ec_videos = df[df["is_ec_video"].eq(True)].to_dict(orient="records")
 
-            return {
-                "ads_videos_count": len(ads_videos),
-                'ec_videos_count': len(ec_videos),
-                "ads_videos": ads_videos,
-                'ec_videos': ec_videos
+            # 简化电商视频数据
+            simplified_ec_videos = simplify_video_data(ec_videos)
+
+            analysis_results["commerce_videos"] = {
+                "ads_videos_count": len(simplified_ads_videos),
+                'ec_videos_count': len(simplified_ec_videos),
+                "ads_videos": simplified_ads_videos,
+                'ec_videos': simplified_ec_videos
             }
 
-        except Exception as e:
-            logger.error(f"❌ 获取广告/带货视频数据时发生错误: {str(e)}")
-            raise
-
-    async def analyze_synthetic_videos(self, **kwargs) -> Dict[str, Any]:
-
-        try:
-            logger.info("📊 正在获取AI/VR生成视频数据...")
-            data = kwargs.get('data')
-            # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
+            # 3. 分析AI/VR生成视频
+            logger.info("📊 正在分析AI/VR生成视频...")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'message': '正在分析AI/VR生成视频...',
+                'total_posts': total_posts,
+                'analysis_results': analysis_results,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
             # 获取AI生成视频
             ai_videos = df[df["created_by_ai"].eq(True)].to_dict(orient="records")
 
+            # 简化AI生成视频数据
+            simplified_ai_videos = simplify_video_data(ai_videos)
+
             # 获取VR视频
             vr_videos = df[df["is_vr"].eq(True)].to_dict(orient="records")
 
-            return {
-                "ai_videos_count": len(ai_videos),
-                'vr_videos_count': len(vr_videos),
-                "ai_videos": ai_videos,
-                'vr_videos': vr_videos
+            # 简化VR视频数据
+            simplified_vr_videos = simplify_video_data(vr_videos)
+
+            analysis_results["synthetic_videos"] = {
+                "ai_videos_count": len(simplified_ai_videos),
+                'vr_videos_count': len(simplified_vr_videos),
+                "ai_videos": simplified_ai_videos,
+                'vr_videos': simplified_vr_videos
             }
 
-        except Exception as e:
-            logger.error(f"❌ 获取AI/VR生成视频数据时发生错误: {str(e)}")
-            raise
-
-    async def analyze_risk_videos(self, **kwargs) -> Dict[str, Any]:
-        """
-        获取用户/达人的风险视频，并且调用video analyzer进行分析
-        """
-
-        try:
-            logger.info("📊 正在获取风险视频数据...")
-            data = kwargs.get('data')
-
-            # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
+            # 4. 分析风险视频
+            logger.info("📊 正在分析风险视频...")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'message': '正在分析风险视频...',
+                'total_posts': total_posts,
+                'analysis_results': analysis_results,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
             # 获取风险视频
             risk_videos = df[df["in_reviewing"] | df["is_prohibited"]].to_dict(orient="records")
 
-            return {
-                "risk_videos_count": len(risk_videos),
-                "risk_videos": risk_videos
+            # 简化风险视频数据
+            simplified_risk_videos = simplify_video_data(risk_videos)
+
+            analysis_results["risk_videos"] = {
+                "risk_videos_count": len(simplified_risk_videos),
+                "risk_videos": simplified_risk_videos
+            }
+
+            uniqueID = url.split("@")[-1]
+            report_url = await self.generate_analysis_report(uniqueID, 'post_creator_analysis', analysis_results)
+
+            # 完成所有分析，返回最终结果
+            yield {
+                'user_profile_url': url,
+                'is_complete': True,
+                'message': '分析完成',
+                'report_url': report_url,
+                'total_posts': total_posts,
+                'analysis_results': analysis_results,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
             }
 
         except Exception as e:
-            logger.error(f"❌ 获取风险视频数据时发生错误: {str(e)}")
-            raise
+            logger.error(f"分析创作者视频时发生错误: {str(e)}")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'error': str(e),
+                'message': f"分析创作者视频时发生错误: {str(e)}",
+                'total_posts': total_posts,
+                'analysis_results': analysis_results,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
     async def analyze_user_fans(self, **kwargs) -> List[Dict]:
         """
