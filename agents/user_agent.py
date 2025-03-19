@@ -29,7 +29,6 @@ class UserAgent:
     标签和相似达人
     """
 
-
     def __init__(self, tikhub_api_key: Optional[str] = None):
         """
         初始化达人分析器
@@ -367,7 +366,7 @@ class UserAgent:
             
             7. Ensure your visualization code is complete and ready to execute with the provided data.
             """,
-            "post_hashtags":"""# System Prompt: Social Media Hashtag Analysis
+            "post_hashtags": """# System Prompt: Social Media Hashtag Analysis
                 You are a social media analytics expert specializing in content categorization and trend analysis. Your task is to analyze a collection of hashtags from a content creator and provide structured insights.     
                 ## Instructions:             
                 1. Parse the provided hashtag data containing hashtag names, usage counts, and unique identifiers.            
@@ -404,10 +403,38 @@ class UserAgent:
                    - Strategic hashtag combinations
                    - Potential new hashtags to explore             
                 Your analysis should be thorough, data-driven, and provide valuable insights that the content creator can implement to improve their social media strategy.
-                """
+                """,
+            "post_creator_analysis": """# System Prompt: Social Media Video Content Analysis
+            You are an expert social media content analyst specializing in TikTok creator strategies and e-commerce trends. Your task is to analyze a collection of videos from a content creator's profile and provide structured insights on their content strategy, product categories, and marketing approaches.
+            ## Instructions:    
+            1. Parse the provided JSON data containing information about different types of videos (hot videos, commerce videos, synthetic videos, etc.).          
+            2. Create well-formatted markdown tables to display the following information for each video category:
+               - Hot Videos Table (showing aweme_id and download_addr)
+               - Commerce Videos Table (showing aweme_id and download_addr)
+               - Synthetic/AI Videos Table (showing aweme_id and download_addr if any)
+               - Risk Videos Table (showing aweme_id and download_addr if any)           
+            3. Analyze the video descriptions ("desc" field) to identify:
+               - Product categories (e.g., skincare, pharmaceuticals, supplements, beauty products)
+               - Target audience segments
+               - Content themes and formats
+               - Common marketing tactics and persuasion techniques
+               - Call-to-action patterns            
+            4. Produce a comprehensive report with the following sections:
+               - Executive Summary (overall content strategy overview)
+               - Video Categories Analysis (statistics and patterns for each video type)
+               - Product Category Analysis (main product types and their prevalence)
+               - Marketing Strategy Analysis (persuasion techniques, urgency creation, problem-solution framing)
+               - Language & Tone Analysis (communication style, emotional appeals)
+               - Recommendations (potential optimization opportunities)           
+            5. Use professional marketing and content strategy terminology when describing the creator's approach.           
+            6. Identify specific patterns in how the creator positions products (e.g., problem-solution framing, before-after scenarios, expertise positioning).           
+            7. Format your analysis as a clear, insightful report with proper markdown formatting, including headers, bullet points, and emphasis where appropriate.          
+            The goal is to provide actionable insights that could help understand the creator's content strategy and the effectiveness of their approach in promoting products on TikTok.
+            """
         }
 
     """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
+
     async def generate_analysis_report(self, uniqueId: str, analysis_type: str, data: Dict[str, Any]) -> str:
         """
         生成报告并转换为HTML
@@ -522,6 +549,7 @@ class UserAgent:
         return html_document
 
     """---------------------------------------------用户/达人基础信息分析方法---------------------------------------------"""
+
     async def fetch_user_profile_analysis(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析用户/达人的基础信息
@@ -562,7 +590,7 @@ class UserAgent:
 
             report_url = await self.generate_analysis_report(uniqueId, 'profile_analysis', data)
 
-            yield{
+            yield {
                 "user_profile_url": url,
                 "is_complete": True,
                 "message": f"已完成用户/达人{url}的基础信息分析，报告已生成",
@@ -603,14 +631,14 @@ class UserAgent:
             async for posts in self.user_collector.collect_user_posts(url):
                 cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
                 if cleaned_posts:
-                    if post_count+ len(cleaned_posts) <= max_post:
+                    if post_count + len(cleaned_posts) <= max_post:
                         posts_raw_data.extend(cleaned_posts)
                         post_count += len(cleaned_posts)
-                        yield{
+                        yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 进度: {post_count}/{max_post}...',
-                            'total_posts': total_posts,
+                            'total_posts': post_count,
                             'posts_stats': posts_stats,
                             'posts_raw_data': posts_raw_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -685,8 +713,9 @@ class UserAgent:
                                            df["day"].value_counts().head(7).to_dict().items()}
             }
 
-            report_url= await self.generate_analysis_report(url, 'post_stats_analysis', stats)
+            uniqueId = url.split("@")[-1]
 
+            report_url = await self.generate_analysis_report(uniqueId, 'post_stats_analysis', stats)
 
             logger.info(f"已完成用户 {url} 发布作品统计分析")
 
@@ -695,7 +724,7 @@ class UserAgent:
                 'is_complete': True,
                 'message': f'已完成发布作品统计分析',
                 'report_url': report_url,
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'posts_stats': stats,
                 'posts_raw_data': posts_raw_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -708,14 +737,15 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析发布作品统计时发生错误: {str(e)}",
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'posts_stats': posts_stats,
                 'posts_raw_data': posts_raw_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
 
-    async def fetch_user_posts_trend(self, url: str, time_interval:str = '90D') -> AsyncGenerator[Dict[str, Any], None]:
+    async def fetch_user_posts_trend(self, url: str, time_interval: str = '90D') -> AsyncGenerator[
+        Dict[str, Any], None]:
         """
         分析用户/达人的发布作品趋势
 
@@ -741,14 +771,14 @@ class UserAgent:
                 cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
                 if cleaned_posts:
                     post_count += len(cleaned_posts)
-                    if post_count <= total_posts:
+                    if post_count <= post_count:
                         posts_raw_data.extend(cleaned_posts)
-                        yield{
+                        yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            'total_posts': total_posts,
-                            #'posts_raw_data': posts_raw_data,
+                            '': post_count,
+                            # 'posts_raw_data': posts_raw_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
@@ -760,8 +790,8 @@ class UserAgent:
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                            'total_posts': total_posts,
-                            #'posts_raw_data': posts_raw_data,
+                            'total_posts': post_count,
+                            # 'posts_raw_data': posts_raw_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
@@ -772,8 +802,8 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                        'total_posts': total_posts,
-                        #'posts_raw_data': posts_raw_data,
+                        'total_posts': post_count,
+                        # 'posts_raw_data': posts_raw_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
@@ -826,15 +856,15 @@ class UserAgent:
             # print(json.dumps(trends_data, indent=4))
             uniqueId = url.split("@")[-1]
 
-            report_url= await self.generate_analysis_report(uniqueId, 'post_trend_analysis', trends_data)
+            report_url = await self.generate_analysis_report(uniqueId, 'post_trend_analysis', trends_data)
 
-            yield{
+            yield {
                 'user_profile_url': url,
                 'is_complete': True,
                 'message': f'已完成发布作品趋势分析',
                 'report_url': report_url,
-                'total_posts': total_posts,
-                #'posts_raw_data': posts_raw_data,
+                'total_posts': post_count,
+                # 'posts_raw_data': posts_raw_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -846,7 +876,7 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析发布趋势时发生错误: {str(e)}",
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'posts_raw_data': posts_raw_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -875,7 +905,7 @@ class UserAgent:
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            'total_posts': total_posts,
+                            'total_posts': post_count,
                             # 'posts_raw_data': posts_raw_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
@@ -888,7 +918,7 @@ class UserAgent:
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                            'total_posts': total_posts,
+                            'total_posts': post_count,
                             # 'posts_raw_data': posts_raw_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
@@ -900,7 +930,7 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                        'total_posts': total_posts,
+                        'total_posts': post_count,
                         # 'posts_raw_data': posts_raw_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
@@ -927,7 +957,8 @@ class UserAgent:
 
             # 只根据小时提取时间，24小时制，0-5点为凌晨，6-11点为上午，12-17点为下午，18-23点为晚上
             df["hour"] = df["create_time"].dt.hour
-            df["hour_range"] = pd.cut(df["hour"], bins=[0, 6, 12, 18, 24], labels=["Dawn/Early Morning", "Morning", "Afternoon", "Evening"])
+            df["hour_range"] = pd.cut(df["hour"], bins=[0, 6, 12, 18, 24],
+                                      labels=["Dawn/Early Morning", "Morning", "Afternoon", "Evening"])
 
             # 统计每个时间段的视频数量
             time_distribution = df["hour_range"].value_counts().to_dict()
@@ -947,7 +978,7 @@ class UserAgent:
                 'is_complete': True,
                 'message': f'已完成发布作品时长分布和时间分布分析',
                 'report_url': report_url,
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'duration_distribution': duration_distribution,
                 'time_distribution': time_distribution,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -961,7 +992,7 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析发布作品时长分布时发生错误: {str(e)}",
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'duration_distribution': duration_distribution,
                 'time_distribution': time_distribution,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -969,7 +1000,7 @@ class UserAgent:
             }
             return
 
-    async def fetch_post_hashtags(self, url: str, count: int) -> AsyncGenerator[Dict[str, Any], None]:
+    async def fetch_post_hashtags(self, url: str, max_hashtags: int) -> AsyncGenerator[Dict[str, Any], None]:
         """
         获取所有的话题，排名使用率最高的话题， 并且生成报告
         """
@@ -991,7 +1022,7 @@ class UserAgent:
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            'total_posts': total_posts,
+                            'total_posts': post_count,
                             # 'posts_raw_data': posts_raw_data,
                             'top_hashtags': hashtags,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1005,7 +1036,7 @@ class UserAgent:
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                            'total_posts': total_posts,
+                            'total_posts': post_count,
                             # 'posts_raw_data': posts_raw_data,
                             'top_hashtags': hashtags,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1018,7 +1049,7 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                        'total_posts': total_posts,
+                        'total_posts': post_count,
                         'top_hashtags': hashtags,
                         # 'posts_raw_data': posts_raw_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1043,7 +1074,7 @@ class UserAgent:
                         hashtags_regroup[name] = {"count": 1, "id": id}
 
             # 获取使用率最高的话题
-            count = min(count, len(hashtags_regroup))
+            count = min(max_hashtags, len(hashtags_regroup))
             hashtags = sorted(hashtags_regroup.items(), key=lambda x: x[1]["count"], reverse=True)[:count]
             hashtags_dict = {hashtag: data for hashtag, data in hashtags}
 
@@ -1056,20 +1087,20 @@ class UserAgent:
                 'is_complete': True,
                 'message': f'已完成获取话题数据',
                 'report_url': report_url,
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'top_hashtags': hashtags,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
 
         except Exception as e:
-            logger.error(f"❌ 获取话题数据时发生错误: {str(e)}")
+            logger.error(f"获取话题数据时发生错误: {str(e)}")
             yield {
                 'user_profile_url': url,
                 'is_complete': False,
                 'error': str(e),
                 'message': f"获取话题数据时发生错误: {str(e)}",
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'top_hashtags': hashtags,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -1106,7 +1137,7 @@ class UserAgent:
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            'total_posts': total_posts,
+                            'total_posts': post_count,
                             'analysis_results': analysis_results,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
@@ -1119,7 +1150,7 @@ class UserAgent:
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备开始分析...',
-                            'total_posts': total_posts,
+                            'total_posts': post_count,
                             'analysis_results': analysis_results,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
@@ -1131,7 +1162,7 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备开始分析...',
-                        'total_posts': total_posts,
+                        'total_posts': post_count,
                         'analysis_results': analysis_results,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
@@ -1159,7 +1190,7 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析热门视频...',
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'analysis_results': analysis_results,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -1208,7 +1239,7 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析广告/带货视频...',
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'analysis_results': analysis_results,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -1239,7 +1270,7 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析AI/VR生成视频...',
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'analysis_results': analysis_results,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -1270,7 +1301,7 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析风险视频...',
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'analysis_results': analysis_results,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -1296,7 +1327,7 @@ class UserAgent:
                 'is_complete': True,
                 'message': '分析完成',
                 'report_url': report_url,
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'analysis_results': analysis_results,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -1309,22 +1340,61 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析创作者视频时发生错误: {str(e)}",
-                'total_posts': total_posts,
+                'total_posts': post_count,
                 'analysis_results': analysis_results,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
 
+    async def fetch_user_fans(self, url: str, max_fans: int = 10000) -> AsyncGenerator[Dict[str, Any], None]:
         """
         获取用户/达人的粉丝画像
         """
+        logger.info("正在获取用户粉丝列表...")
+        start_time = time.time()
+        fans_count = 0
+        fans_data = []
+        total_fans = await self.user_collector.fetch_total_fans_count(url)
 
-        data = kwargs.get('data')
-        logger.info("📊 正在分析用户粉丝画像...")
-        with open(f"{config.DATA_DIR}/fans_analysis.json", "w") as f:
-            json.dump(data, f)
-        return data
-
+        try:
+            async for fans_batch in self.user_collector.stream_user_fans(url):
+                cleaned_fans = await self.user_cleaner.clean_user_fans(fans_batch)
+                fans_count += len(cleaned_fans)
+                if fans_count < max_fans:
+                    fans_data.extend(cleaned_fans)
+                    yield {
+                        'user_profile_url': url,
+                        'is_complete': False,
+                        'message': f'已采集{fans_count}个粉丝， 进度： {fans_count}/{max_fans}',
+                        'total_fans': fans_count,
+                        # 'fans': fans_data,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'processing_time': round(time.time() - start_time, 2)
+                    }
+                elif fans_count >= max_fans:
+                    fans_data.extend(cleaned_fans[:max_fans - fans_count])
+                    break
+            yield {
+                'user_profile_url': url,
+                'is_complete': True,
+                'message': f'已完成所有粉丝采集，总计{fans_count}粉丝',
+                'total_fans': fans_count,
+                'fans': fans_data,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
+        except Exception as e:
+            logger.error(f"采集粉丝时发生错误: {str(e)}")
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'error': str(e),
+                'message': f"采集粉丝时发生错误: {str(e)}",
+                'total_fans': fans_count,
+                'fans': fans_data,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
 
 async def main():
@@ -1335,10 +1405,9 @@ async def main():
     user_url = "https://www.tiktok.com/@galileofarma"
 
     # 测试fetch_user_posts_trend
-    async for data in analyzer.fetch_post_hashtags(user_url, 30):
+    async for data in analyzer.fetch_user_fans(user_url):
         print(data)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

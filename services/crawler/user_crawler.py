@@ -253,7 +253,7 @@ class UserCollector:
         minCursor = 0
         maxCursor = 0
         has_more = True
-        logger.info(f"🔍 开始收集用户粉丝数据 - URL: {url}")
+        logger.info(f"开始收集用户粉丝数据 - URL: {url}")
 
         try:
             async with ClientSession() as session:

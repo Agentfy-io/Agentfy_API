@@ -151,6 +151,7 @@ app.openapi = custom_openapi
 # app.include_router(auth.router, prefix="/api/v1", tags=["认证"])
 app.include_router(customer.router, prefix="/api/v1", tags=["购买客户分析"])
 app.include_router(sentiment.router, prefix="/api/v1", tags=["评论舆情分析"])
+app.include_router(user.router, prefix="/api/v1", tags=["用户/达人分析"])
 app.include_router(video.router, prefix="/api/v1", tags=["视频全方位分析"])
 app.include_router(audio.router, prefix="/api/v1", tags=["短视频脚本/音频生成"])
 
