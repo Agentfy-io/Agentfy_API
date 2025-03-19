@@ -3,7 +3,6 @@ import os
 import re
 import time
 from datetime import datetime
-import matplotlib.pyplot as plt
 import pandas as pd
 import asyncio
 from app.config import settings
