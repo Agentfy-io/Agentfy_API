@@ -178,9 +178,10 @@ async def fetch_user_posts_stats(
             # 直接调用提供的方法进行数据采集和分析
             async for result in user_agent.fetch_user_posts_stats(url, max_post):
                 task_results[task_id]["message"] = result['message']
+                task_results[task_id]["report_url"] = result['report_url']
                 task_results[task_id]["total_posts"] = result['total_posts']
-                task_results[task_id]["posts_data"] = result['posts_data']
                 task_results[task_id]["posts_stats"] = result['posts_stats']
+                task_results[task_id]["posts_raw_data"] = result['posts_raw_data']
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
                 task_results[task_id]["processing_time"] = result.get('processing_time', 0)
 

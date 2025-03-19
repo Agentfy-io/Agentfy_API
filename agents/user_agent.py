@@ -270,7 +270,36 @@ class UserAgent:
 
 
 
-            """
+            """,
+            "post_stats_analysis": """
+                # System Prompt: TikTok Analytics Report Generator        
+                You are an expert data analyst specializing in social media metrics. Your task is to generate a comprehensive, well-formatted report based on TikTok account analytics data. The user will provide a JSON object containing various metrics about their TikTok posts. You should analyze this data and create a professional report with the following components:          
+                ## Report Structure    
+                1. **Executive Summary**: Start with a concise summary of the overall account performance, highlighting 3-5 key metrics.                
+                2. **Engagement Metrics**: Create a table showing the total and average engagement metrics (views, likes, comments, shares, downloads, collects).     
+                3. **Content Analysis**: Analyze the different types of content (AI-generated, VR, ads, e-commerce, professional) and their distribution.
+                4. **Top Performing Content**: Create a table showing the videos with the highest metrics in different categories.
+                5. **Posting Frequency**: Analyze posting patterns including daily and weekly averages, and recent posting activity.
+                6. **Strategic Insights**: Provide 3-5 data-backed insights and recommendations based on the metrics.
+                
+                ## Formatting Guidelines  
+                - Use markdown tables for presenting numeric data
+                - Include section headers with clear hierarchy
+                - Use bullet points for listing insights and recommendations
+                - Bold important numbers and key findings
+                - Use emoji sparingly to enhance readability (💡 for insights, 📈 for growth metrics, etc.)
+                - Format large numbers with commas for better readability
+                - Round decimals to 2 places for averages and percentages
+                
+                ## Response Tone  
+                - Professional but accessible
+                - Data-driven with clear interpretations
+                - Focus on actionable insights
+                - Avoid overly technical jargon unless necessary
+                
+                When you receive the JSON data, parse it carefully and organize the information logically in your report. Pay special attention to highlighting notable patterns, outliers, and potential opportunities for improvement.     
+                Your report should be comprehensive enough to provide value but concise enough to be quickly digestible. Aim for a report that would take 3-5 minutes to read thoroughly.
+                """,
         }
 
     """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
@@ -294,7 +323,7 @@ class UserAgent:
             sys_prompt = self.system_prompts[analysis_type]
 
             # 获取用户提示
-            user_prompt = f"Generate a report for the {analysis_type} analysis based on the following data:\n{json.dumps(data, ensure_ascii=False)}, for user {uniqueId}"
+            user_prompt = f"Generate a report for the {analysis_type} based on the following data:\n{json.dumps(data, ensure_ascii=False)}, for user {uniqueId}"
 
             # 生成报告
             response = await self.chatgpt.chat(
@@ -463,7 +492,7 @@ class UserAgent:
         total_posts = await self.user_collector.fetch_total_posts_count(url)
         max_post = min(max_post, total_posts)
 
-        logger.info("📊 正在分析发布作品统计...")
+        logger.info("正在分析发布作品统计...")
         try:
             # 采集用户发布的作品数据
             async for posts in self.user_collector.collect_user_posts(url):
@@ -551,15 +580,19 @@ class UserAgent:
                                            df["day"].value_counts().head(7).to_dict().items()}
             }
 
+            report_url= await self.generate_analysis_report(url, 'post_stats_analysis', stats)
+
+
             logger.info(f"已完成用户 {url} 发布作品统计分析")
 
             yield {
                 'user_profile_url': url,
                 'is_complete': True,
                 'message': f'已完成发布作品统计分析',
+                'report_url': report_url,
                 'total_posts': total_posts,
                 'posts_stats': stats,
-                'posts_data': posts_data,
+                'posts_raw_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -572,10 +605,345 @@ class UserAgent:
                 'message': f"分析发布作品统计时发生错误: {str(e)}",
                 'total_posts': total_posts,
                 'posts_stats': posts_stats,
-                'posts_data': posts_data,
+                'posts_raw_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
 
+    async def fetch_user_posts_trend(self, url: str, time_interval:str = '30D') -> Dict[str, Any]:
+        """
+        分析用户/达人的发布作品趋势
+
+        Args:
+            url: 用户/达人主页URL
+            time_interval: 时间间隔，默认30天
+
+        Returns:
+            Dict包含:
+            - post_trend: 发布趋势数据
+            - interaction_trend: 互动趋势数据
+        """
+        post_count = 0
+        start_time = time.time()
+        posts_data = []
+        total_posts = await self.user_collector.fetch_total_posts_count(url)
+
+        # 计算时间范围 - 使用当前时间作为结束时间
+        end_date = pd.Timestamp.now()
+        start_date = end_date - pd.Timedelta(time_interval)
+
+        logger.info("正在分析发布作品趋势统计...")
+
+        try:
+            # 采集用户发布的作品数据
+            async for posts in self.user_collector.collect_user_posts(url):
+                cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
+                # 把这个list里面create_time 从timestamp 秒转换为日期, 只保留 end_date - start_date 之间的数据
+                cleaned_posts = [post for post in cleaned_posts if start_date <= pd.to_datetime(post["create_time"], unit='s') <= end_date]
+                if cleaned_posts:
+                    posts_data.extend(cleaned_posts)
+                    post_count += len(cleaned_posts)
+                    yield{
+                        'user_profile_url': url,
+                        'is_complete': False,
+                        'message': f'已采集{post_count}条作品数据...',
+                        'total_posts': total_posts,
+                        'posts_stats': posts_stats,
+                        'posts_data': posts_data,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'processing_time': round(time.time() - start_time, 2)
+                    }
+                else:
+                    logger.info(f"已采集{post_count}条作品数据, 完成")
+                    break
+
+
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
+            df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
+            df = df.sort_values("create_time")
+
+            # 计算时间范围 - 使用当前时间作为结束时间
+            end_date = pd.Timestamp.now()
+            start_date = end_date - pd.Timedelta(time_interval)
+
+            # 筛选时间范围内的数据
+            df = df[df["create_time"].between(start_date, end_date)]
+
+            # 生成日期序列作为基准
+            date_range = pd.date_range(start=start_date.date(), end=end_date.date(), freq='D')
+
+            # 统计每日发布数量
+            df["date"] = df["create_time"].dt.date
+            daily_posts = df["date"].value_counts().reindex(date_range.date, fill_value=0)
+
+            # 统计每日互动数据, 包括点赞数，评论数，分享数，播放数
+            interaction_metrics = ["digg_count", "comment_count", "share_count", "play_count"]
+            daily_interactions = df.groupby("date")[interaction_metrics].sum()
+            daily_interactions = daily_interactions.reindex(date_range.date, fill_value=0)
+
+            # 构建返回数据 - 确保按日期排序
+            daily_posts = daily_posts.sort_index()
+            daily_interactions = daily_interactions.sort_index()
+
+            trends_data = {
+                "post_trend": {
+                    "x": [d.strftime("%Y-%m-%d") for d in daily_posts.index],
+                    "y": daily_posts.values.tolist()
+                },
+                "interaction_trend": {
+                    metric: {
+                        "x": [d.strftime("%Y-%m-%d") for d in daily_interactions.index],
+                        "y": daily_interactions[metric].values.tolist()
+                    }
+                    for metric in interaction_metrics
+                }
+            }
+
+            return trends_data
+
+        except Exception as e:
+            logger.error(f"❌ 分析发布趋势时发生错误: {str(e)}")
+            raise
+
+    async def analyze_post_duration_distribution(self, **kwargs) -> Dict[str, Any]:
+        """
+        分析用户/达人的发布作品时长分布
+        """
+        logger.info("📊 正在分析发布作品时长分布...")
+        data = kwargs.get('data')
+        try:
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 将视频时长从毫秒转换为秒
+            df["duration"] = df["duration"] / 1000
+
+            # 根据视频时长分布统计， 0-15s, 15-30s, 30-60s, 60-120s, 120s以上
+            bins = [0, 15, 30, 60, 120, float("inf")]
+            labels = ["0-15s", "15-30s", "30-60s", "60-120s", "120s+"]
+            df["duration_range"] = pd.cut(df["duration"], bins=bins, labels=labels)
+
+            # 统计每个时长区间的视频数量
+            duration_distribution = df["duration_range"].value_counts().to_dict()
+            return duration_distribution
+
+        except Exception as e:
+            logger.error(f"❌ 分析发布作品时长分布时发生错误: {str(e)}")
+            raise
+
+    async def analyze_post_time_distribution(self, **kwargs) -> Dict[str, Any]:
+        """
+        分析用户/达人的发布作品时间分布
+        """
+        logger.info("📊 正在分析发布作品时间分布...")
+
+        data = kwargs.get('data')
+        try:
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
+            df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
+            df = df.sort_values("create_time")
+
+            # 只根据小时提取时间，24小时制，0-5点为凌晨，6-11点为上午，12-17点为下午，18-23点为晚上
+            df["hour"] = df["create_time"].dt.hour
+            df["hour_range"] = pd.cut(df["hour"], bins=[0, 6, 12, 18, 24], labels=["凌晨", "上午", "下午", "晚上"])
+
+            # 统计每个时间段的视频数量
+            time_distribution = df["hour_range"].value_counts().to_dict()
+            return time_distribution
+
+        except Exception as e:
+            logger.error(f"❌ 分析发布作品时间分布时发生错误: {str(e)}")
+            raise
+
+    async def analyze_hashtags(self, **kwargs) -> dict[str, Any]:
+        """
+        获取所有的话题，排名使用率最高的话题，前5的话题, 最后用ai来生成话题分析报告
+        """
+        try:
+            logger.info("📊 正在获取话题数据...")
+            data = kwargs.get('data')
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 获取所有的话题, 以及每个话题的使用次数
+            all_hashtags = df["hashtags"]
+            hashtags_regroup = {}
+            for hashtags in all_hashtags:
+                if hashtags is None:
+                    continue
+                hashtags = json.loads(hashtags)
+                for name, id in hashtags.items():
+                    if name in hashtags_regroup:
+                        hashtags_regroup[name]["count"] += 1
+                    else:
+                        hashtags_regroup[name] = {"count": 1, "id": id}
+
+            # 获取使用率最高的话题
+            top_hashtags = sorted(hashtags_regroup.items(), key=lambda x: x[1]["count"], reverse=True)[:20]
+
+            return {
+                "top_hashtags": top_hashtags
+            }
+
+        except Exception as e:
+            logger.error(f"❌ 获取话题数据时发生错误: {str(e)}")
+            raise
+
+    async def analyze_hot_videos(self, **kwargs) -> Dict[str, Any]:
+        """
+        获取用户/达人的前5热门视频, 和置顶视频，并且调用video analyzer进行分析
+        """
+        try:
+            logger.info("📊 正在获取热门视频数据...")
+            data = kwargs.get('data')
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 获取热门视频，按照点赞数排序，取前5
+            hot_videos_digg = df.sort_values("digg_count", ascending=False).head(5).to_dict(orient="records")
+
+            # 获取热门视频，按照播放量数排序，取前5
+            hot_videos_views = df.sort_values("play_count", ascending=False).head(5).to_dict(orient="records")
+
+            # 获取热门视频，按照评论数排序，取前5
+            hot_videos_comments = df.sort_values("comment_count", ascending=False).head(5).to_dict(orient="records")
+
+            # 获取热门视频，按照分享数排序，取前5
+            hot_videos_shares = df.sort_values("share_count", ascending=False).head(5).to_dict(orient="records")
+
+            # 将它们合并，根据aweme_id去重
+            hot_videos = []
+            seen_ids = set()
+
+            for video in hot_videos_digg + hot_videos_views + hot_videos_comments + hot_videos_shares:
+                video_id = video['aweme_id']  # Replace 'id' with whatever unique identifier your dictionaries use
+                if video_id not in seen_ids:
+                    seen_ids.add(video_id)
+                    hot_videos.append(video)
+
+            # 获取置顶视频
+            top_videos = df[df["is_top"].eq(True)].to_dict(orient="records")
+
+            return {
+                "hot_videos": hot_videos,
+                "top_videos": top_videos,
+                "top_videos_count": len(top_videos)
+            }
+
+        except Exception as e:
+            logger.error(f"❌ 获取热门视频数据时发生错误: {str(e)}")
+            raise
+
+    async def analyze_commerce_videos(self, **kwargs) -> Dict[str, Any]:
+        """
+        获取用户/达人的广告视频，并且调用video analyzer进行分析
+        """
+
+        try:
+            logger.info("📊 正在获取广告/带货视频数据...")
+            data = kwargs.get('data')
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 获取广告视频
+            ads_videos = df[df["is_ads"].eq(True)].to_dict(orient="records")
+
+            # 获取电商视频
+            ec_videos = df[df["is_ec_video"].eq(True)].to_dict(orient="records")
+
+            return {
+                "ads_videos_count": len(ads_videos),
+                'ec_videos_count': len(ec_videos),
+                "ads_videos": ads_videos,
+                'ec_videos': ec_videos
+            }
+
+        except Exception as e:
+            logger.error(f"❌ 获取广告/带货视频数据时发生错误: {str(e)}")
+            raise
+
+    async def analyze_synthetic_videos(self, **kwargs) -> Dict[str, Any]:
+
+        try:
+            logger.info("📊 正在获取AI/VR生成视频数据...")
+            data = kwargs.get('data')
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 获取AI生成视频
+            ai_videos = df[df["created_by_ai"].eq(True)].to_dict(orient="records")
+
+            # 获取VR视频
+            vr_videos = df[df["is_vr"].eq(True)].to_dict(orient="records")
+
+            return {
+                "ai_videos_count": len(ai_videos),
+                'vr_videos_count': len(vr_videos),
+                "ai_videos": ai_videos,
+                'vr_videos': vr_videos
+            }
+
+        except Exception as e:
+            logger.error(f"❌ 获取AI/VR生成视频数据时发生错误: {str(e)}")
+            raise
+
+    async def analyze_risk_videos(self, **kwargs) -> Dict[str, Any]:
+        """
+        获取用户/达人的风险视频，并且调用video analyzer进行分析
+        """
+
+        try:
+            logger.info("📊 正在获取风险视频数据...")
+            data = kwargs.get('data')
+
+            # 使用pandas进行数据处理
+            df = pd.DataFrame(data)
+
+            # 获取风险视频
+            risk_videos = df[df["in_reviewing"] | df["is_prohibited"]].to_dict(orient="records")
+
+            return {
+                "risk_videos_count": len(risk_videos),
+                "risk_videos": risk_videos
+            }
+
+        except Exception as e:
+            logger.error(f"❌ 获取风险视频数据时发生错误: {str(e)}")
+            raise
+
+    async def analyze_user_fans(self, **kwargs) -> List[Dict]:
+        """
+        获取用户/达人的粉丝画像
+        """
+
+        data = kwargs.get('data')
+        logger.info("📊 正在分析用户粉丝画像...")
+        with open(f"{config.DATA_DIR}/fans_analysis.json", "w") as f:
+            json.dump(data, f)
+        return data
+
+
+
+async def main():
+    crawler = UserCollector()
+    cleaner = UserCleaner()
+    analyzer = UserAgent()
+
+    user_url = "https://www.tiktok.com/@charlidamelio"
+    raw_profile_data = await crawler.execute("collect_user_profile", user_url=user_url)
+    cleaned_profile_data = await cleaner.execute("clean_user_profile_data", data=raw_profile_data)
+
+    # 分析用户基础信息
+    profile_analysis = await analyzer.execute("analyze_profile", data=cleaned_profile_data)
+    print(profile_analysis)
+
+
+if __name__ == "__main__":
     asyncio.run(main())
 
