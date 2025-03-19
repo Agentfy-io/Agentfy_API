@@ -215,6 +215,449 @@ async def fetch_user_posts_stats(
         success=True
     )
 
+    @router.post(
+        "/fetch_user_posts_trend",
+        summary="全面分析TikTok用户/达人发布作品趋势",
+        description="""
+    用途:
+      * 后台创建指定TikTok用户/达人作品趋势分析任务
+      * 采集并分析用户/达人的发布作品数据随时间的变化
+      * 计算时间段内的发布频率和互动数据变化趋势
+      * 支持自定义分析时间区间
+
+    参数:
+      * url: TikTok用户主页URL，格式为https://tiktok.com/@username
+      * time_interval: 分析的时间区间，如"90D"表示90天，默认为90天
+
+    （深度趋势分析，助您掌握创作者成长轨迹！）
+    """,
+        response_model_exclude_none=True,
+    )
+    async def fetch_user_posts_trend(
+            request: Request,
+            background_tasks: BackgroundTasks,
+            url: str = Query(..., description="TikTok用户主页URL"),
+            time_interval: str = Query("90D", description="分析的时间区间，例如'90D'表示90天"),
+            user_agent: UserAgent = Depends(get_user_agent)
+    ):
+        """
+        分析TikTok用户/达人的发布作品趋势
+
+        返回任务ID和初始状态
+        """
+
+        # 生成任务ID
+        task_id = f"posts_trend_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+        # 初始化任务状态
+        task_results[task_id] = {
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat(),
+            "url": url,
+            "time_interval": time_interval,
+            "total_posts": 0,
+        }
+
+        async def process_user_posts_trend():
+            try:
+                # 更新任务状态
+                task_results[task_id]["status"] = "processing"
+                task_results[task_id]["message"] = "正在分析用户/达人发布作品趋势...请过10秒+后再查看"
+
+                # 直接调用提供的方法进行数据采集和分析
+                async for result in user_agent.fetch_user_posts_trend(url, time_interval):
+                    task_results[task_id]["message"] = result['message']
+                    if 'report_url' in result:
+                        task_results[task_id]["report_url"] = result['report_url']
+                    task_results[task_id]["total_posts"] = result['total_posts']
+                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                    task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                    # 处理进度更新
+                    if 'error' in result:
+                        task_results[task_id]["status"] = "failed"
+                        break
+                    if result['is_complete']:
+                        task_results[task_id]["status"] = "completed"
+                        break
+                    else:
+                        task_results[task_id]["status"] = "processing"
+            except Exception as e:
+                logger.error(f"后台任务处理用户 '{url}' 发布作品趋势时出错: {str(e)}")
+                task_results[task_id]["status"] = "failed"
+                task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+        # 添加后台任务
+        background_tasks.add_task(process_user_posts_trend)
+
+        # 返回任务信息
+        return create_response(
+            data={
+                "task_id": task_id,
+                "status": "pending",
+                "message": "任务已创建，正在启动",
+                "timestamp": datetime.now().isoformat()
+            },
+            success=True
+        )
+
+
+@router.post(
+    "/fetch_post_duration_and_time_distribution",
+    summary="分析TikTok用户/达人发布作品时长与时间分布",
+    description="""
+用途:
+  * 后台创建指定TikTok用户/达人作品时长与发布时间分析任务
+  * 采集并分析用户/达人作品的时长分布情况（0-15秒、15-30秒等区间）
+  * 分析用户/达人发布作品的时间段分布（凌晨、上午、下午、晚上）
+  * 生成详细的分布报告，了解创作者的内容模式
+
+参数:
+  * url: TikTok用户主页URL，格式为https://tiktok.com/@username
+
+（内容规律分析，助您洞察创作者行为模式！）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_post_duration_and_time_distribution(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        url: str = Query(..., description="TikTok用户主页URL"),
+        user_agent: UserAgent = Depends(get_user_agent)
+):
+    """
+    分析TikTok用户/达人的发布作品时长与时间分布
+
+    返回任务ID和初始状态
+    """
+
+    # 生成任务ID
+    task_id = f"duration_time_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "url": url,
+        "total_posts": 0,
+        "duration_distribution": {},
+        "time_distribution": {}
+    }
+
+    async def process_duration_and_time_distribution():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在分析用户/达人发布作品时长与时间分布...请过10秒+后再查看"
+
+            # 直接调用提供的方法进行数据采集和分析
+            async for result in user_agent.fetch_post_duration_and_time_distribution(url):
+                task_results[task_id]["message"] = result['message']
+                if 'report_url' in result:
+                    task_results[task_id]["report_url"] = result['report_url']
+                task_results[task_id]["total_posts"] = result['total_posts']
+                task_results[task_id]["duration_distribution"] = result.get('duration_distribution', {})
+                task_results[task_id]["time_distribution"] = result.get('time_distribution', {})
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                # 处理进度更新
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    break
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                else:
+                    task_results[task_id]["status"] = "processing"
+        except Exception as e:
+            logger.error(f"后台任务处理用户 '{url}' 发布作品时长与时间分布时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_duration_and_time_distribution)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
+
+@router.post(
+    "/fetch_post_hashtags",
+    summary="分析TikTok用户/达人使用的热门话题标签",
+    description="""
+用途:
+  * 后台创建指定TikTok用户/达人话题标签分析任务
+  * 采集并分析用户/达人所有作品中使用的话题标签
+  * 统计话题标签使用频率，获取最常用的热门标签
+  * 生成详细的标签使用报告
+
+参数:
+  * url: TikTok用户主页URL，格式为https://tiktok.com/@username
+  * max_hashtags: 返回的热门话题标签数量，默认为所有标签
+
+（标签策略分析，助您掌握创作者话题选择！）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_post_hashtags(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        url: str = Query(..., description="TikTok用户主页URL"),
+        max_hashtags: int = Query(10, description="返回的热门话题标签数量"),
+        user_agent: UserAgent = Depends(get_user_agent)
+):
+    """
+    分析TikTok用户/达人使用的热门话题标签
+
+    返回任务ID和初始状态
+    """
+
+    # 生成任务ID
+    task_id = f"hashtags_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "url": url,
+        "total_posts": 0,
+        "top_hashtags": {}
+    }
+
+    async def process_post_hashtags():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在分析用户/达人使用的热门话题标签...请过10秒+后再查看"
+
+            # 直接调用提供的方法进行数据采集和分析
+            async for result in user_agent.fetch_post_hashtags(url, max_hashtags):
+                task_results[task_id]["message"] = result['message']
+                if 'report_url' in result:
+                    task_results[task_id]["report_url"] = result['report_url']
+                task_results[task_id]["total_posts"] = result['total_posts']
+                task_results[task_id]["top_hashtags"] = result.get('top_hashtags', {})
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                # 处理进度更新
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    break
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                else:
+                    task_results[task_id]["status"] = "processing"
+        except Exception as e:
+            logger.error(f"后台任务处理用户 '{url}' 热门话题标签分析时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_post_hashtags)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
+
+
+@router.post(
+    "/fetch_post_creator_analysis",
+    summary="全面分析TikTok创作者视频内容特征",
+    description="""
+用途:
+  * 后台创建指定TikTok用户/达人视频内容特征分析任务
+  * 综合分析创作者的视频内容，包括多个维度的内容特征
+  * 识别热门视频、广告/带货视频、AI/VR生成视频、风险视频等
+  * 生成详细的内容特征报告
+
+参数:
+  * url: TikTok用户主页URL，格式为https://tiktok.com/@username
+
+（深度内容特征分析，助您全面了解创作者内容策略！）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_post_creator_analysis(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        url: str = Query(..., description="TikTok用户主页URL"),
+        user_agent: UserAgent = Depends(get_user_agent)
+):
+    """
+    全面分析TikTok创作者视频内容特征
+
+    返回任务ID和初始状态
+    """
+
+    # 生成任务ID
+    task_id = f"creator_analysis_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "url": url,
+        "total_posts": 0,
+        "analysis_results": {}
+    }
+
+    async def process_post_creator_analysis():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在分析创作者视频内容特征...请过10秒+后再查看"
+
+            # 直接调用提供的方法进行数据采集和分析
+            async for result in user_agent.fetch_post_creator_analysis(url):
+                task_results[task_id]["message"] = result['message']
+                if 'report_url' in result:
+                    task_results[task_id]["report_url"] = result['report_url']
+                task_results[task_id]["total_posts"] = result['total_posts']
+                task_results[task_id]["analysis_results"] = result.get('analysis_results', {})
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                # 处理进度更新
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    break
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                else:
+                    task_results[task_id]["status"] = "processing"
+        except Exception as e:
+            logger.error(f"后台任务处理用户 '{url}' 创作者视频内容特征分析时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_post_creator_analysis)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
+
+@router.post(
+    "/fetch_user_fans",
+    summary="获取TikTok用户/达人粉丝",
+    description="""
+用途:
+  * 后台创建指定TikTok用户/达人粉丝采集任务
+  * 采集用户/达人的粉丝列表和基本信息
+  * 提供粉丝画像数据，了解粉丝群体特征
+  * 支持限制采集的最大粉丝数量
+
+参数:
+  * url: TikTok用户主页URL，格式为https://tiktok.com/@username
+  * max_fans: 最多采集的粉丝数量，默认为10000
+
+（粉丝洞察分析，助您了解目标受众特征！）
+""",
+    response_model_exclude_none=True,
+)
+async def fetch_user_fans(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        url: str = Query(..., description="TikTok用户主页URL"),
+        max_fans: int = Query(10000, description="最多采集的粉丝数量"),
+        user_agent: UserAgent = Depends(get_user_agent)
+):
+    """
+    获取TikTok用户/达人的粉丝画像
+
+    返回任务ID和初始状态
+    """
+
+    # 生成任务ID
+    task_id = f"user_fans_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "pending",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "url": url,
+        "total_fans": 0,
+        "fans_count": 0
+    }
+
+    async def process_user_fans():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["message"] = "正在获取用户粉丝数据...请过10秒+后再查看"
+
+            # 直接调用提供的方法进行数据采集和分析
+            async for result in user_agent.fetch_user_fans(url, max_fans):
+                task_results[task_id]["message"] = result['message']
+                task_results[task_id]["total_fans"] = result['total_fans']
+                if 'fans' in result:
+                    task_results[task_id]["fans"] = result['fans']
+                    task_results[task_id]["fans_count"] = len(result['fans'])
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                # 处理进度更新
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    break
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                else:
+                    task_results[task_id]["status"] = "processing"
+        except Exception as e:
+            logger.error(f"后台任务处理用户 '{url}' 粉丝采集时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_user_fans)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "pending",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
 
 @router.get(
