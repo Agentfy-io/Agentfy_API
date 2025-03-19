@@ -366,6 +366,45 @@ class UserAgent:
                - A concise summary
             
             7. Ensure your visualization code is complete and ready to execute with the provided data.
+            """,
+            "post_hashtags":"""# System Prompt: Social Media Hashtag Analysis
+                You are a social media analytics expert specializing in content categorization and trend analysis. Your task is to analyze a collection of hashtags from a content creator and provide structured insights.     
+                ## Instructions:             
+                1. Parse the provided hashtag data containing hashtag names, usage counts, and unique identifiers.            
+                2. Create a well-formatted markdown table with the following columns:
+                   - Hashtag Name (without the # symbol)
+                   - Usage Count
+                   - Hashtag ID           
+                3. start the table by usage count in descending order to highlight the most frequently used hashtags.             
+                4. Perform a comprehensive analysis of the hashtags, including:
+                   - Industry/vertical identification (e.g., beauty, pharmacy, wellness, fashion)
+                   - Product categories (e.g., skincare, cosmetics, pharmaceuticals)
+                   - Content types or themes (e.g., tutorials, product reviews, tips)
+                   - Target audience demographics
+                   - Language analysis (identify primary language and any multilingual strategies)         
+                5. Group related hashtags into logical categories based on their themes and purposes.
+                
+                6. Identify the top 5 most important hashtags and explain their significance to the creator's content strategy.
+                
+                7. Produce a detailed report with the following sections:
+                   - Executive Summary
+                   - Hashtag Usage Table
+                   - Content Category Analysis
+                   - Product/Service Focus
+                   - Audience Targeting Strategy
+                   - Language & Geographic Focus
+                   - Key Hashtag Analysis
+                   - Strategic Recommendations
+                
+                8. Format your analysis as a professional report using proper markdown with clear section headers, bullet points, and emphasis where appropriate.
+                
+                9. Provide actionable recommendations on:
+                   - Hashtag optimization opportunities
+                   - Underutilized hashtag categories
+                   - Strategic hashtag combinations
+                   - Potential new hashtags to explore             
+                Your analysis should be thorough, data-driven, and provide valuable insights that the content creator can implement to improve their social media strategy.
+                """
         }
 
     """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
@@ -553,7 +592,7 @@ class UserAgent:
         """
         post_count = 0
         start_time = time.time()
-        posts_data = []
+        posts_raw_data = []
         posts_stats = {}
         total_posts = await self.user_collector.fetch_total_posts_count(url)
         max_post = min(max_post, total_posts)
@@ -565,7 +604,7 @@ class UserAgent:
                 cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
                 if cleaned_posts:
                     if post_count+ len(cleaned_posts) <= max_post:
-                        posts_data.extend(cleaned_posts)
+                        posts_raw_data.extend(cleaned_posts)
                         post_count += len(cleaned_posts)
                         yield{
                             'user_profile_url': url,
@@ -573,17 +612,17 @@ class UserAgent:
                             'message': f'已采集{post_count}条作品数据, 进度: {post_count}/{max_post}...',
                             'total_posts': total_posts,
                             'posts_stats': posts_stats,
-                            'posts_data': posts_data,
+                            'posts_raw_data': posts_raw_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
                     else:
-                        posts_data.extend(cleaned_posts[:max_post - post_count])
+                        posts_raw_data.extend(cleaned_posts[:max_post - post_count])
                         post_count = max_post
                         logger.info(f"已采集{post_count}条作品数据, 完成")
                         break
             # 使用pandas进行数据处理
-            df = pd.DataFrame(posts_data)
+            df = pd.DataFrame(posts_raw_data)
 
             # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
             df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
@@ -658,7 +697,7 @@ class UserAgent:
                 'report_url': report_url,
                 'total_posts': total_posts,
                 'posts_stats': stats,
-                'posts_raw_data': posts_data,
+                'posts_raw_data': posts_raw_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -671,7 +710,7 @@ class UserAgent:
                 'message': f"分析发布作品统计时发生错误: {str(e)}",
                 'total_posts': total_posts,
                 'posts_stats': posts_stats,
-                'posts_raw_data': posts_data,
+                'posts_raw_data': posts_raw_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -930,15 +969,65 @@ class UserAgent:
             }
             return
 
-    async def analyze_hashtags(self, **kwargs) -> dict[str, Any]:
+    async def fetch_post_hashtags(self, url: str, count: int) -> AsyncGenerator[Dict[str, Any], None]:
         """
-        获取所有的话题，排名使用率最高的话题，前5的话题, 最后用ai来生成话题分析报告
+        获取所有的话题，排名使用率最高的话题， 并且生成报告
         """
+        logger.info("正在获取话题数据...")
+        start_time = time.time()
+        post_count = 0
+        posts_raw_data = []
+        hashtags = {}
+        total_posts = await self.user_collector.fetch_total_posts_count(url)
         try:
-            logger.info("📊 正在获取话题数据...")
-            data = kwargs.get('data')
+            # 采集用户发布的作品数据
+            async for posts in self.user_collector.collect_user_posts(url):
+                cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
+                if cleaned_posts:
+                    post_count += len(cleaned_posts)
+                    if post_count <= total_posts:
+                        posts_raw_data.extend(cleaned_posts)
+                        yield {
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
+                            'total_posts': total_posts,
+                            # 'posts_raw_data': posts_raw_data,
+                            'top_hashtags': hashtags,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                    elif post_count > total_posts:
+                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        post_count = total_posts
+                        logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
+                        yield {
+                            'user_profile_url': url,
+                            'is_complete': False,
+                            'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
+                            'total_posts': total_posts,
+                            # 'posts_raw_data': posts_raw_data,
+                            'top_hashtags': hashtags,
+                            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                            'processing_time': round(time.time() - start_time, 2)
+                        }
+                        break
+                else:
+                    logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
+                    yield {
+                        'user_profile_url': url,
+                        'is_complete': False,
+                        'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
+                        'total_posts': total_posts,
+                        'top_hashtags': hashtags,
+                        # 'posts_raw_data': posts_raw_data,
+                        'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        'processing_time': round(time.time() - start_time, 2)
+                    }
+                    break
+
             # 使用pandas进行数据处理
-            df = pd.DataFrame(data)
+            df = pd.DataFrame(posts_raw_data)
 
             # 获取所有的话题, 以及每个话题的使用次数
             all_hashtags = df["hashtags"]
@@ -954,15 +1043,37 @@ class UserAgent:
                         hashtags_regroup[name] = {"count": 1, "id": id}
 
             # 获取使用率最高的话题
-            top_hashtags = sorted(hashtags_regroup.items(), key=lambda x: x[1]["count"], reverse=True)[:20]
+            count = min(count, len(hashtags_regroup))
+            hashtags = sorted(hashtags_regroup.items(), key=lambda x: x[1]["count"], reverse=True)[:count]
+            hashtags_dict = {hashtag: data for hashtag, data in hashtags}
 
-            return {
-                "top_hashtags": top_hashtags
+            uniqueID = url.split("@")[-1]
+
+            report_url = await self.generate_analysis_report(uniqueID, 'post_hashtags', hashtags_dict)
+
+            yield {
+                'user_profile_url': url,
+                'is_complete': True,
+                'message': f'已完成获取话题数据',
+                'report_url': report_url,
+                'total_posts': total_posts,
+                'top_hashtags': hashtags,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
             }
 
         except Exception as e:
             logger.error(f"❌ 获取话题数据时发生错误: {str(e)}")
-            raise
+            yield {
+                'user_profile_url': url,
+                'is_complete': False,
+                'error': str(e),
+                'message': f"获取话题数据时发生错误: {str(e)}",
+                'total_posts': total_posts,
+                'top_hashtags': hashtags,
+                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'processing_time': round(time.time() - start_time, 2)
+            }
 
     async def analyze_hot_videos(self, **kwargs) -> Dict[str, Any]:
         """
@@ -1104,13 +1215,11 @@ async def main():
     cleaner = UserCleaner()
     analyzer = UserAgent()
 
-    user_url = "https://www.tiktok.com/@charlidamelio"
-    raw_profile_data = await crawler.execute("collect_user_profile", user_url=user_url)
-    cleaned_profile_data = await cleaner.execute("clean_user_profile_data", data=raw_profile_data)
+    user_url = "https://www.tiktok.com/@galileofarma"
 
-    # 分析用户基础信息
-    profile_analysis = await analyzer.execute("analyze_profile", data=cleaned_profile_data)
-    print(profile_analysis)
+    # 测试fetch_user_posts_trend
+    async for data in analyzer.fetch_post_hashtags(user_url, 30):
+        print(data)
 
 
 if __name__ == "__main__":
