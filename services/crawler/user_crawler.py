@@ -276,10 +276,15 @@ class UserCollector:
                         request_url,
                         params,
                     )
-                    data = data['data']
-                    new_fans = data['userList']
-                    minCursor = data['minCursor']
-                    has_more = data['hasMore']
+                    try:
+                        data = data['data']
+                        new_fans = data['userList']
+
+                        minCursor = data['minCursor']
+                        has_more = data['hasMore']
+                    except Exception as e:
+                        logger.info(f"采集粉丝字段获取问题")
+                        continue
 
                     if new_fans:
                         fans.extend(new_fans)
@@ -296,11 +301,7 @@ class UserCollector:
         except Exception as e:
             # 捕获所有其他未预期的异常并包装成 ExternalAPIError
             logger.error(f"流式收集评论时发生未预期错误: {str(e)}")
-            raise ExternalAPIError(
-                detail="流式收集评论时出现未预期错误",
-                service="TikHub",
-                original_error=e
-            )
+            return
 
     async def collect_user_posts(self, url: str, count: int = 30) -> AsyncGenerator[List[Dict], None]:
         """
