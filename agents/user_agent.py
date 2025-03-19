@@ -1315,7 +1315,6 @@ class UserAgent:
                 'processing_time': round(time.time() - start_time, 2)
             }
 
-    async def analyze_user_fans(self, **kwargs) -> List[Dict]:
         """
         获取用户/达人的粉丝画像
         """
