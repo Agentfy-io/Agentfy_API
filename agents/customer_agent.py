@@ -11,6 +11,7 @@ import sys
 import time
 import asyncio
 from datetime import datetime
+import markdown
 from time import process_time
 from typing import Dict, Any, List, Optional, Union, AsyncGenerator
 
@@ -69,7 +70,6 @@ class CustomerAgent:
 
         # 加载系统和用户提示
         self._load_system_prompts()
-        self._load_user_prompts()
 
     def _load_system_prompts(self) -> None:
         """加载系统提示用于不同的评论分析类型"""
@@ -252,20 +252,12 @@ class CustomerAgent:
                 """
         }
 
-    def _load_user_prompts(self) -> None:
-        """加载用户提示用于不同的评论分析类型"""
-        self.user_prompts = {
-            'purchase_intent': {
-                'description': 'purchase intent'
-            }
-        }
-
     """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
     async def _analyze_aspect(
             self,
             aspect_type: str,
             comment_data: List[Dict[str, Any]],
-    ) -> Optional[List[Dict[str, Any]]]:
+    ) -> Dict[str, str | Any]:
         """
         通用分析方法，根据不同的分析类型调用ChatGPT或Claude AI模型。
 
@@ -286,21 +278,21 @@ class CustomerAgent:
             ValidationError: 当aspect_type无效时
             ExternalAPIError: 当调用AI服务时出错
         """
+
+        # 验证分析类型是否支持
+        if aspect_type not in self.analysis_types:
+            raise ValidationError(detail=f"不支持的分析类型: {aspect_type}", field="aspect_type")
+
+        # 检查评论数据是否为空
+        if not comment_data:
+            logger.warning("评论数据为空，跳过分析")
+            raise ValidationError(detail="评论数据为空，无法分析", field="comment_data")
+
         try:
-            # 验证分析类型是否支持
-            if aspect_type not in self.analysis_types:
-                raise ValidationError(detail=f"不支持的分析类型: {aspect_type}", field="aspect_type")
-
-            # 检查评论数据是否为空
-            if not comment_data:
-                logger.warning("评论数据为空，跳过分析")
-                return []
-
             # 获取分析的系统提示和用户提示
-            aspect_config = self.user_prompts[aspect_type]
             sys_prompt = self.system_prompts[aspect_type]
             user_prompt = (
-                f"Analyze the {aspect_config['description']} for the following comments:\n"
+                f"Analyze the purchase intent for the following comments:\n"
                 f"{json.dumps(comment_data, ensure_ascii=False)}"
             )
 
@@ -310,30 +302,13 @@ class CustomerAgent:
                     comment['text'] = comment['text'][:997] + "..."
 
             # 尝试使用ChatGPT进行分析
-            try:
-                response = await self.chatgpt.chat(
-                    system_prompt=sys_prompt,
-                    user_prompt=user_prompt
-                )
+            response = await self.chatgpt.chat(
+                system_prompt=sys_prompt,
+                user_prompt=user_prompt
+            )
 
-                # 解析ChatGPT返回的结果
-                analysis_results = response["choices"][0]["message"]["content"].strip()
-
-            except ExternalAPIError as e:
-                # ChatGPT失败时尝试使用Claude作为备份
-                logger.warning(f"ChatGPT分析失败，尝试使用Claude: {str(e)}")
-                try:
-                    response = await self.claude.chat(
-                        system_prompt=sys_prompt,
-                        user_prompt=user_prompt
-                    )
-                    analysis_results = response["choices"][0]["message"]["content"].strip()
-                except Exception as claude_error:
-                    logger.error(f"Claude分析也失败: {str(claude_error)}")
-                    raise ExternalAPIError(
-                        detail="所有AI服务均无法完成分析",
-                        service="AI"
-                    )
+            # 解析ChatGPT返回的结果
+            analysis_results = response['response']["choices"][0]["message"]["content"].strip()
 
             # 处理返回的JSON格式（可能包含在Markdown代码块中）
             analysis_results = re.sub(
@@ -342,28 +317,20 @@ class CustomerAgent:
                 analysis_results.strip()
             )
 
-            try:
-                analysis_result = json.loads(analysis_results)
-                return analysis_result
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON解析错误: {str(e)}, 原始内容: {analysis_results[:200]}...")
-                raise ExternalAPIError(
-                    detail="AI返回的结果无法解析为JSON",
-                    service="AI",
-                    original_error=e
-                )
+            analysis_results = json.loads(analysis_results)
 
-        except ValidationError:
-            # 直接向上传递验证错误
-            raise
-        except ExternalAPIError:
-            # 直接向上传递API错误
+            result = {
+                "response": analysis_results,
+                "cost": response["cost"]
+            }
+            return result
+        except (ValidationError, InternalServerError, ExternalAPIError):
             raise
         except Exception as e:
             logger.error(f"分析评论方面时发生未预期错误: {str(e)}")
             raise InternalServerError(f"分析评论方面时发生未预期错误: {str(e)}")
 
-    async def generate_analysis_report(self, aweme_id: str, analysis_type: str, data: Dict[str, Any]) -> str:
+    async def generate_analysis_report(self, aweme_id: str, analysis_type: str, data: Dict[str, Any]) -> Dict[str, str | Any]:
         """
         生成报告并转换为HTML
 
@@ -378,51 +345,55 @@ class CustomerAgent:
         if analysis_type not in self.system_prompts:
             raise ValueError(f"Invalid report type: {analysis_type}. Choose from {self.system_prompts.keys()}")
 
-        # 获取系统提示
-        sys_prompt = self.system_prompts[analysis_type]
+        try:
+            # 获取系统提示
+            sys_prompt = self.system_prompts[analysis_type]
 
-        # 获取用户提示
-        user_prompt = f"Generate a report for the {analysis_type} analysis based on the following data:\n{json.dumps(data, ensure_ascii=False)}, for video ID: {aweme_id}"
+            # 获取用户提示
+            user_prompt = f"Generate a report for the {analysis_type} analysis based on the following data:\n{json.dumps(data, ensure_ascii=False)}, for video ID: {aweme_id}"
 
-        # 生成报告
-        response = await self.chatgpt.chat(
-            system_prompt=sys_prompt,
-            user_prompt=user_prompt
-        )
+            # 生成报告
+            response = await self.chatgpt.chat(
+                system_prompt=sys_prompt,
+                user_prompt=user_prompt
+            )
 
-        report = response["choices"][0]["message"]["content"].strip()
+            report = response['response']["choices"][0]["message"]["content"].strip()
 
-        # 保存Markdown报告
-        report_dir = "reports"
-        os.makedirs(report_dir, exist_ok=True)
+            # 保存Markdown报告
+            report_dir = "reports"
+            os.makedirs(report_dir, exist_ok=True)
 
-        report_md_path = os.path.join(report_dir, f"report_{aweme_id}.md")
-        with open(report_md_path, "w", encoding="utf-8") as f:
-            f.write(report)
+            report_md_path = os.path.join(report_dir, f"report_{aweme_id}.md")
+            with open(report_md_path, "w", encoding="utf-8") as f:
+                f.write(report)
 
-        # 转换为HTML
-        html_content = self.convert_markdown_to_html(report, f"{analysis_type.title()} Analysis for {aweme_id}")
-        html_filename = f"report_{aweme_id}.html"
-        html_path = os.path.join(report_dir, html_filename)
+            # 转换为HTML
+            html_content = self.convert_markdown_to_html(report, f"{analysis_type.title()} Analysis for {aweme_id}")
+            html_filename = f"report_{aweme_id}.html"
+            html_path = os.path.join(report_dir, html_filename)
 
-        with open(html_path, 'w', encoding='utf-8') as f:
-            f.write(html_content)
+            with open(html_path, 'w', encoding='utf-8') as f:
+                f.write(html_content)
 
-        # 生成本地文件URL
-        absolute_path = os.path.abspath(html_path)
+            # 生成本地文件URL
+            absolute_path = os.path.abspath(html_path)
 
-        # 构建file://协议URL
-        file_url = f"file://{absolute_path}"
+            # 构建file://协议URL
+            file_url = f"file://{absolute_path}"
 
-        # 确保路径分隔符是URL兼容的
-        if os.name == 'nt':  # Windows系统
-            # Windows路径需要转换为URL格式
-            file_url = file_url.replace('\\', '/')
+            # 确保路径分隔符是URL兼容的
+            if os.name == 'nt':  # Windows系统
+                # Windows路径需要转换为URL格式
+                file_url = file_url.replace('\\', '/')
 
-        print(f"报告已生成: Markdown ({report_md_path}), HTML ({html_path})")
-        print(f"报告本地URL: {file_url}")
-
-        return file_url
+            return {
+                "report_url": file_url,
+                "cost": response["cost"]
+            }
+        except Exception as e:
+            logger.error(f"生成报告时发生未预期错误: {str(e)}")
+            raise InternalServerError(f"生成报告时发生未预期错误: {str(e)}")
 
     def convert_markdown_to_html(self, markdown_content: str, title: str = "Analysis Report") -> str:
         """
@@ -435,11 +406,6 @@ class CustomerAgent:
         Returns:
             str: HTML内容
         """
-        try:
-            import markdown
-        except ImportError:
-            print("请安装markdown库: pip install markdown")
-            return f"<pre>{markdown_content}</pre>"
 
         # 转换Markdown为HTML
         html_content = markdown.markdown(
@@ -586,19 +552,16 @@ class CustomerAgent:
             ValidationError: 当aweme_id为空或无效时
             ExternalAPIError: 当网络连接失败时
         """
+        if not aweme_id or not isinstance(aweme_id, str):
+            raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
+
         start_time = time.time()
-        processing_time = 0
         comments = []
         total_comments = 0
 
+        logger.info(f"🔍 开始获取视频 {aweme_id} 的评论")
+
         try:
-            # 验证输入参数
-            if not aweme_id or not isinstance(aweme_id, str):
-                raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
-
-            # 记录开始获取评论
-            logger.info(f"🔍 开始获取视频 {aweme_id} 的评论")
-
             # 获取评论
             async for comment_batch in self.comment_collector.stream_video_comments(aweme_id):
                 # 对每批评论进行清洗
@@ -615,8 +578,6 @@ class CustomerAgent:
                 if region_filter:
                     comments_df = comments_df[comments_df['commenter_region'] == region_filter]
 
-                # 计算处理时间
-                processing_time = round((time.time() - start_time) * 1000, 2)
                 total_comments += len(comments_df)
 
                 comments.extend(comments_df.to_dict(orient='records'))
@@ -624,32 +585,35 @@ class CustomerAgent:
                 yield {
                     'aweme_id': aweme_id,
                     'is_complete': False,
+                    'message': f"已获取 {total_comments} 条评论",
+                    'total_collected_comments': total_comments,
                     'current_batch_count': len(comments_df),
                     'current_batch_comments': comments_df.to_dict(orient='records'),
-                    'comments': comments,
                     'timestamp': datetime.now().isoformat(),
-                    'processing_time': processing_time
+                    'processing_time_ms': round((time.time() - start_time) * 100, 2)
                 }
 
             # 记录获取评论结束
             yield {
                 'aweme_id': aweme_id,
                 'is_complete': True,
-                'total_comments': total_comments,
+                'total_collected_comments': total_comments,
                 'comments': comments,
                 'timestamp': datetime.now().isoformat(),
-                'processing_time': processing_time
+                'processing_time_ms': round((time.time() - start_time) * 100, 2)
             }
         except Exception as e:
             logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
             yield {
                 'aweme_id': aweme_id,
+                'is_complete': False,
                 'error': str(e),
-                'total_comments': total_comments,
+                'total_collected_comments': total_comments,
                 'comments': comments,
                 'timestamp': datetime.now().isoformat(),
-                'processing_time': processing_time
+                'processing_time_ms': round((time.time() - start_time) * 100, 2)
             }
+            return
 
     """---------------------------------------------获取购买意愿客户信息-----------------------------------------"""
 
@@ -689,14 +653,15 @@ class CustomerAgent:
             ValidationError: 当aweme_id为空或无效时
             ExternalAPIError: 当网络连接失败时
         """
+        # 验证输入参数
+        if not aweme_id or not isinstance(aweme_id, str):
+            raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
+
         start_time = time.time()
         potential_customers = []  # 临时存储分析结果
+        llm_processing_cost = {'total_cost': 0.0, 'input_cost': 0.0, 'output_cost': 0.0}
 
         try:
-            # 验证输入参数
-            if not aweme_id or not isinstance(aweme_id, str):
-                raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
-
             logger.info(f"开始流式获取视频 {aweme_id} 的潜在客户")
 
             # 流式获取评论
@@ -728,7 +693,12 @@ class CustomerAgent:
                 ]
                 logger.info(f"准备分析评论批次: {len(analysis_data)} 条评论")
 
-                analysis_results = await self._analyze_aspect('purchase_intent', analysis_data)
+                results = await self._analyze_aspect('purchase_intent', analysis_data)
+                analysis_results = results['response']
+
+                llm_processing_cost['total_cost'] += results['cost']['total_cost']
+                llm_processing_cost['input_cost'] += results['cost']['input_cost']
+                llm_processing_cost['output_cost'] += results['cost']['output_cost']
 
                 if analysis_results:
                     # 将分析结果与原始评论合并
@@ -769,7 +739,7 @@ class CustomerAgent:
 
                         # 检查是否超过客户限制并截断
                         remaining = customer_count - self.total_customers
-                        if len(filtered_list) >= remaining:
+                        if len(filtered_list) > remaining:
                             filtered_list = filtered_list[:remaining]
                             potential_customers.extend(filtered_list)
                             self.total_customers = customer_count
@@ -780,6 +750,7 @@ class CustomerAgent:
                                 'aweme_id': aweme_id,
                                 'is_complete': True,
                                 'message': f"已达到最大客户数量 {customer_count}，停止处理",
+                                'llm_processing_cost': llm_processing_cost,
                                 'current_batch_customers': filtered_list,
                                 'potential_customers': potential_customers,
                                 'customer_count': self.total_customers,
@@ -794,6 +765,7 @@ class CustomerAgent:
                                 'aweme_id': aweme_id,
                                 'is_complete': False,
                                 'message': f"已获取潜在客户 {self.total_customers} 个, 继续处理...",
+                                'llm_processing_cost': llm_processing_cost,
                                 'current_batch_customers': filtered_list,
                                 'potential_customers': potential_customers,
                                 'customer_count': self.total_customers,
@@ -804,27 +776,26 @@ class CustomerAgent:
                 'aweme_id': aweme_id,
                 'is_complete': True,
                 'message': f"已完成处理所有评论，总共找到 {len(potential_customers)} 个潜在客户",
+                'llm_processing_cost': llm_processing_cost,
                 'potential_customers': potential_customers,
                 'customer_count': self.total_customers,
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
-
-        except (ValidationError, ExternalAPIError) as e:
-            # 直接向上传递这些已处理的错误
-            logger.error(f"流式获取潜在客户时出错: {str(e)}")
-            raise
         except Exception as e:
             logger.error(f"流式获取潜在客户时发生未预期错误: {str(e)}")
             yield {
                 'aweme_id': aweme_id,
                 'error': str(e),
+                'is_complete': False,
                 'message': f"处理潜在客户时发生错误: {str(e)}",
+                'llm_processing_cost': llm_processing_cost,
                 'potential_customers': potential_customers,  # 返回已处理的客户
                 'customer_count': len(potential_customers),
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
+            return
 
     async def stream_keyword_potential_customers(
             self,
@@ -865,6 +836,7 @@ class CustomerAgent:
         total_customers = 0
         all_potential_customers = []
         processed_videos = 0
+        llm_processing_cost = {'total_cost': 0.0, 'input_cost': 0.0, 'output_cost': 0.0}
 
         try:
             # 验证输入参数
@@ -873,21 +845,22 @@ class CustomerAgent:
 
             logger.info(f"🔍 开始流式获取关键词 '{keyword}' 相关视频的潜在客户")
 
-            # 获取清理后的视频数据
-            video_collector = VideoCollector(self.tikhub_api_key)
-            video_cleaner = VideoCleaner()
-            raw_videos = await video_collector.collect_videos_by_keyword(keyword)
-            cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
-
             yield {
                 'keyword': keyword,
                 'is_complete': False,
-                'message': f"已找到 {len(cleaned_videos.get('videos', []))} 个与关键词 '{keyword}' 相关的视频",
+                'message': f"正在搜索与关键词 '{keyword}' 相关的视频...",
+                'llm_processing_cost': llm_processing_cost,
                 'customer_count': 0,
                 'potential_customers': [],
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
+
+            # 获取清理后的视频数据
+            video_collector = VideoCollector(self.tikhub_api_key)
+            video_cleaner = VideoCleaner()
+            raw_videos = await video_collector.collect_videos_by_keyword(keyword)
+            cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
 
             # 提取视频ID列表
             videos_df = pd.DataFrame(cleaned_videos.get('videos', []))
@@ -897,9 +870,13 @@ class CustomerAgent:
                 yield {
                     'keyword': keyword,
                     'message': f"未找到与关键词 '{keyword}' 相关的视频",
+                    'error': f"未找到与关键词 '{keyword}' 相关的视频",
+                    'is_complete': False,
+                    'llm_processing_cost': llm_processing_cost,
                     'potential_customers': [],
                     'customer_count': 0,
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now().isoformat(),
+                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
                 return
 
@@ -920,44 +897,39 @@ class CustomerAgent:
                         region_filter=region_filter
                 ):
                     processed_videos += 1
-                    users_list = []
-                    if result.get('current_batch_customers'):
+                    llm_processing_cost['total_cost'] += result['llm_processing_cost']['total_cost']
+                    llm_processing_cost['input_cost'] += result['llm_processing_cost']['input_cost']
+                    llm_processing_cost['output_cost'] += result['llm_processing_cost']['output_cost']
+
+                    if 'current_batch_customers' in result:
                         users_list = result['current_batch_customers']
 
-                    remaining = customer_count - total_customers
-                    # 检查是否达到目标客户数量
-                    if len(users_list) >= remaining:
-                        users_list = users_list[:remaining]
-                        all_potential_customers.extend(users_list)
-                        total_customers = customer_count
-                        logger.info(f"已达到目标客户数量 {customer_count}，停止处理")
-                        yield {
-                            'keyword': keyword,
-                            'is_complete': True,
-                            'message': f"已达到目标客户数量 {customer_count}，停止处理",
-                            'aweme_id': result.get('aweme_id', ''),
-                            'customer_count': total_customers,
-                            'potential_customers': all_potential_customers,
-                            'timestamp': datetime.now().isoformat(),
-                            'processing_time_ms': round((time.time() - start_time) * 1000, 2)
-                        }
-                        break
-                    else:
-                        total_customers += len(users_list)
-                        all_potential_customers.extend(users_list)
-                        yield {
-                            'keyword': keyword,
-                            'is_complete': False,
-                            'message': f"已获取视频ID {aweme_id} 潜在客户 {total_customers} 个, 继续处理...",
-                            'customer_count': total_customers,
-                            'potential_customers': users_list,
-                            'timestamp': datetime.now().isoformat(),
-                            'processing_time_ms': round((time.time() - start_time) * 1000, 2)
-                        }
+                        remaining = customer_count - total_customers
+                        # 检查是否达到目标客户数量
+                        if len(users_list) >= remaining:
+                            users_list = users_list[:remaining]
+                            all_potential_customers.extend(users_list)
+                            total_customers = customer_count
+                            logger.info(f"已达到目标客户数量 {customer_count}，停止处理")
+                            break
+                        else:
+                            total_customers += len(users_list)
+                            all_potential_customers.extend(users_list)
+                            yield {
+                                'keyword': keyword,
+                                'is_complete': False,
+                                'message': f"已获取视频ID {aweme_id} 潜在客户 {total_customers} 个, 继续处理...",
+                                'llm_processing_cost': llm_processing_cost,
+                                'customer_count': total_customers,
+                                'potential_customers': all_potential_customers,
+                                'timestamp': datetime.now().isoformat(),
+                                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                            }
             yield {
                 'keyword': keyword,
                 'is_complete': True,
                 'message': f"已完成处理所有视频，总共找到 {len(all_potential_customers)} 个潜在客户",
+                'llm_processing_cost': llm_processing_cost,
                 'customer_count': total_customers,
                 'potential_customers': all_potential_customers,
                 'timestamp': datetime.now().isoformat(),
@@ -969,12 +941,14 @@ class CustomerAgent:
                 'keyword': keyword,
                 'error': str(e),
                 'message': f"处理关键词相关潜在客户时发生错误: {str(e)}",
+                'llm_processing_cost': llm_processing_cost,
                 'potential_customers': all_potential_customers,
                 'customer_count': total_customers,
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2),
                 'is_complete': False
             }
+            return
 
     """---------------------------------------------获取购买意愿报告-----------------------------------------"""
 
@@ -1001,24 +975,25 @@ class CustomerAgent:
             InternalServerError: 当内部处理出错时
         """
 
+        # 输入验证
+        if not aweme_id:
+            raise ValidationError(detail="aweme_id不能为空", field="aweme_id")
+
+        if batch_size <= 0 or batch_size > settings.MAX_BATCH_SIZE:
+            raise ValidationError(
+                detail=f"batch_size必须在1和{settings.MAX_BATCH_SIZE}之间",
+                field="batch_size"
+            )
+
         start_time = time.time()
         comments = []
         results = []
         analysis_summary = {}
         total_collected_comments = 0
         total_analyzed_comments = 0
+        llm_processing_cost = {'total_cost': 0.0, 'input_cost': 0.0, 'output_cost': 0.0}
 
         try:
-            # 输入验证
-            if not aweme_id:
-                raise ValidationError(detail="aweme_id不能为空", field="aweme_id")
-
-            if batch_size <= 0 or batch_size > settings.MAX_BATCH_SIZE:
-                raise ValidationError(
-                    detail=f"batch_size必须在1和{settings.MAX_BATCH_SIZE}之间",
-                    field="batch_size"
-                )
-
             # 流式获取评论
             async for comments_batch in self.fetch_video_comments(aweme_id):
                 if 'error' not in comments_batch and not comments_batch['is_complete']:
@@ -1031,11 +1006,13 @@ class CustomerAgent:
                 yield {
                     'aweme_id': aweme_id,
                     'is_complete': False,
+                    'llm_processing_cost': llm_processing_cost,
                     'total_collected_comments': total_collected_comments,
                     'total_analyzed_comments': total_analyzed_comments,
                     'analysis_summary': analysis_summary,
                     'message': f"正在获取评论: {total_collected_comments} 条",
-                    'timestamp': comments_batch.get('timestamp', datetime.now().isoformat())
+                    'timestamp': comments_batch.get('timestamp', datetime.now().isoformat()),
+                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
 
             # 数据验证
@@ -1067,15 +1044,17 @@ class CustomerAgent:
             yield {
                 'aweme_id': aweme_id,
                 'is_complete': False,
+                'llm_processing_cost': llm_processing_cost,
                 'total_collected_comments': total_collected_comments,
                 'total_analyzed_comments': total_analyzed_comments,
                 'analysis_summary': analysis_summary,
                 'message': f"开始购买意图分析，共 {len(comment_batches)} 批，每批约 {avg_batch_size} 条评论",
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
 
             logger.info(
-                f"🚀 开始购买意图分析，共 {len(comment_batches)} 批，每批约 {avg_batch_size} 条评论"
+                f"开始购买意图分析，共 {len(comment_batches)} 批，每批约 {avg_batch_size} 条评论"
             )
 
             # 批次处理
@@ -1099,7 +1078,6 @@ class CustomerAgent:
                 batch_results = await asyncio.gather(*tasks, return_exceptions=True)
 
                 # 处理结果，过滤掉异常
-                valid_results = []
                 error_count = 0
 
                 for j, result in enumerate(batch_results):
@@ -1108,82 +1086,58 @@ class CustomerAgent:
                         logger.error(error_msg)
                         error_count += 1
                     else:
-                        valid_results.append(result)
+                        results.extend(result['response'])
+                        llm_processing_cost['total_cost'] += result['cost']['total_cost']
+                        llm_processing_cost['input_cost'] += result['cost']['input_cost']
+                        llm_processing_cost['output_cost'] += result['cost']['output_cost']
 
                 # 只在有错误时才发送错误进度更新
                 if error_count > 0:
-                    yield {
-                        'aweme_id': aweme_id,
-                        'is_complete': False,
-                        'total_collected_comments': total_collected_comments,
-                        'total_analyzed_comments': len(results),
-                        'analysis_summary': analysis_summary,
-                        'message': f"批次 {i + 1} 至 {i + len(batch_group)} 中有 {error_count} 个批次分析失败",
-                        'timestamp': datetime.now().isoformat()
-                    }
-
-                # 添加有效结果
-                results.extend(valid_results)
+                    raise InternalServerError(f"批次 {i + 1} 至 {i + len(batch_group)} 分析失败")
 
                 # 发送进度更新
                 yield {
                     'aweme_id': aweme_id,
                     'is_complete': False,
+                    'llm_processing_cost': llm_processing_cost,
                     'total_collected_comments': total_collected_comments,
                     'total_analyzed_comments': len(results),
                     'analysis_summary': analysis_summary,
-                    'message': f"已分析 {len(results)} 条评论，完成度 {i*concurrency/len(comment_batches)}%",
-                    'timestamp': datetime.now().isoformat()
+                    'message': f"已分析批次 {i + 1} 至 {i + len(batch_group)}，评论索引范围: {batch_indices}，继续处理...",
+                    'timestamp': datetime.now().isoformat(),
+                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
 
             # 合并所有分析结果
             try:
-                # 将所有结果扁平化为单个列表
-                all_results = []
-                for batch_result in results:
-                    if isinstance(batch_result, list):
-                        all_results.extend(batch_result)
-
                 # 创建结果DataFrame
-                if not all_results:
+                if not results:
                     raise InternalServerError("没有有效的分析结果")
-
-                analysis_df = pd.DataFrame(all_results)
-
-                # 确保必要的列存在
-                if 'comment_id' not in analysis_df.columns:
-                    logger.warning("分析结果缺少comment_id列，使用索引合并")
-                    analysis_df['temp_index'] = range(len(analysis_df))
-                    comments_df['temp_index'] = range(min(len(comments_df), len(analysis_df)))
-                    merged_df = pd.merge(comments_df, analysis_df, on='temp_index', how='left')
-                    merged_df = merged_df.drop('temp_index', axis=1)
-                else:
-                    # 基于comment_id合并
-                    merged_df = pd.merge(comments_df, analysis_df, on='comment_id', how='left')
+                analysis_df = pd.DataFrame(results)
+                merged_df = pd.merge(comments_df, analysis_df, on='comment_id', how='left')
 
                 # 处理重复的text列
                 if 'text_y' in merged_df.columns:
                     merged_df = merged_df.drop('text_y', axis=1)
                     merged_df = merged_df.rename(columns={'text_x': 'text'})
 
-                logger.info(f"✅ 所有购买意向分析完成！总计 {len(merged_df)} 条数据")
+                logger.info(f"✅ 所有购买意向合并完成！总计 {len(merged_df)} 条数据")
                 yield {
                     'aweme_id': aweme_id,
                     'is_complete': False,
+                    'llm_processing_cost': llm_processing_cost,
                     'total_collected_comments': total_collected_comments,
                     'total_analyzed_comments': len(merged_df),
                     'analysis_summary': analysis_summary,
                     'message': "所有购买意向分析完成, 正在合并结果，准备生成报告，请稍候...",
-                    'timestamp': datetime.now().isoformat()
+                    'timestamp': datetime.now().isoformat(),
+                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
 
             except Exception as e:
                 error_msg = f"合并分析结果时出错: {str(e)}"
                 logger.error(error_msg)
                 raise InternalServerError(error_msg)
-
-            if merged_df.empty:
-                raise InternalServerError(f"分析视频 {aweme_id} 的评论失败，结果为空")
 
             # 根据commenter_uniqueId去重
             analyzed_df = merged_df.drop_duplicates(subset=['commenter_uniqueId'])
@@ -1198,23 +1152,27 @@ class CustomerAgent:
                     'aweme_id': aweme_id,
                     'analysis_type': 'purchase_intent_stats',
                     'analysis_timestamp': datetime.now().isoformat(),
-                    'processing_time_ms': round((time.time() - start_time) * 1000, 2)
                 }
             }
 
             # 生成报告
-            report_url = await self.generate_analysis_report(aweme_id, 'purchase_intent_report', analysis_summary)
-            analysis_summary['report_url'] = report_url
+            result = await self.generate_analysis_report(aweme_id, 'purchase_intent_report', analysis_summary)
+            llm_processing_cost['total_cost'] += result['cost']['total_cost']
+            llm_processing_cost['input_cost'] += result['cost']['input_cost']
+            llm_processing_cost['output_cost'] += result['cost']['output_cost']
 
             # 返回最终结果
             yield {
                 'aweme_id': aweme_id,
                 'is_complete': True,
+                'llm_processing_cost': llm_processing_cost,
                 'total_collected_comments': total_collected_comments,
                 'total_analyzed_comments': len(analyzed_df),
+                'report_url': result['report_url'],
                 'analysis_summary': analysis_summary,
                 'message': "购买意图分析完成",
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 100,2)
             }
 
         except (ValidationError, ExternalAPIError, InternalServerError) as e:
@@ -1224,11 +1182,13 @@ class CustomerAgent:
                 'aweme_id': aweme_id,
                 'is_complete': True,
                 'error': str(e),
+                'llm_processing_cost': llm_processing_cost,
                 'total_collected_comments': total_collected_comments,
                 'total_analyzed_comments': len(results) if 'results' in locals() else 0,
                 'analysis_summary': analysis_summary,
                 'message': f"购买意图分析失败: {str(e)}",
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 100,2)
             }
             return  # 确保生成器在返回错误后停止
         except Exception as e:
@@ -1239,11 +1199,13 @@ class CustomerAgent:
                 'aweme_id': aweme_id,
                 'is_complete': True,
                 'error': str(e),
+                'llm_processing_cost': llm_processing_cost,
                 'total_collected_comments': total_collected_comments,
                 'total_analyzed_comments': len(results) if 'results' in locals() else 0,
                 'analysis_summary': analysis_summary,
                 'message': f"购买意图分析失败: {str(e)}",
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 100,2)
             }
             return  # 确保生成器在返回错误后停止
 
@@ -1383,6 +1345,8 @@ class CustomerAgent:
         """
         start_time = time.time()
         reply_message = ""
+        llm_processing_cost = {'total_cost': 0.0, 'input_cost': 0.0, 'output_cost': 0.0}
+
         try:
             # 参数验证
             if not customer_message:
@@ -1395,18 +1359,19 @@ class CustomerAgent:
                 'customer_id': customer_id,
                 'is_complete': False,
                 'reply_message': reply_message,
+                'llm_processing_cost': llm_processing_cost,
                 'message': "开始生成回复消息",
                 'timestamp': datetime.now().isoformat()
             }
             # 生成回复消息
-            reply_message = await self.chatgpt.chat(
+            result = await self.chatgpt.chat(
                 system_prompt=sys_prompt,
                 user_prompt=user_prompt,
                 temperature=0.7,
             )
 
             # 解析回复消息
-            reply_message = reply_message["choices"][0]["message"]["content"].strip()
+            reply_message = result['response']["choices"][0]["message"]["content"].strip()
             # 解析json
             reply_message = re.sub(
                 r"```json\n|\n```",
@@ -1416,11 +1381,14 @@ class CustomerAgent:
 
             reply_message = json.loads(reply_message)
 
+            llm_processing_cost = result['cost']
+
             yield {
                 'customer_id': customer_id,
                 'is_complete': True,
                 'reply_message': reply_message,
                 'message': "回复消息生成完成",
+                'llm_processing_cost': llm_processing_cost,
                 'timestamp': datetime.now().isoformat(),
                 'processing_time': round((time.time() - start_time) * 1000, 2)
             }
@@ -1430,6 +1398,7 @@ class CustomerAgent:
                 'customer_id': customer_id,
                 'is_complete': True,
                 'error': str(e),
+                'llm_processing_cost': llm_processing_cost,
                 'reply_message': reply_message,
                 'message': f"生成回复消息时发生错误: {str(e)}",
                 'timestamp': datetime.now().isoformat(),
@@ -1442,6 +1411,7 @@ class CustomerAgent:
                 'customer_id': customer_id,
                 'is_complete': True,
                 'error': str(e),
+                'llm_processing_cost': llm_processing_cost,
                 'reply_message': reply_message,
                 'message': f"生成回复消息时发生错误: {str(e)}",
                 'timestamp': datetime.now().isoformat(),
@@ -1472,6 +1442,8 @@ class CustomerAgent:
         """
         all_replies = []
         total_replies_count = 0
+        llm_processing_cost = {'total_cost': 0.0, 'input_cost': 0.0, 'output_cost': 0.0}
+
         try:
             # 参数验证
             if not shop_info:
@@ -1488,10 +1460,10 @@ class CustomerAgent:
                 'is_complete': False,
                 'message': "开始批量生成客户回复消息",
                 'replies': all_replies,
+                'llm_processing_cost': llm_processing_cost,
                 'total_replies_count': total_replies_count,
                 'timestamp': datetime.now().isoformat()
             }
-
 
             # 按批次处理消息
             for i in range(0, len(messages_list), batch_size):
@@ -1501,14 +1473,14 @@ class CustomerAgent:
                 user_prompt = f"here is the shop information:\n{shop_info}\n\nhere are the customer messages:\n{json.dumps(batch, ensure_ascii=False)}"
 
                 # 调用AI生成回复
-                batch_replies = await self.chatgpt.chat(
+                result = await self.chatgpt.chat(
                     system_prompt=self.system_prompts['batch_customer_reply'],
                     user_prompt=user_prompt,
                     temperature=0.7
                 )
 
                 # 解析AI回复
-                batch_replies = batch_replies["choices"][0]["message"]["content"].strip()
+                batch_replies = result['response']["choices"][0]["message"]["content"].strip()
                 # 解析JSON
                 batch_replies = re.sub(
                     r"```json\n|\n```",
@@ -1533,9 +1505,14 @@ class CustomerAgent:
                         all_replies.append(reply)
                         total_replies_count += 1
 
+                    llm_processing_cost['total_cost'] += result['cost']['total_cost']
+                    llm_processing_cost['input_cost'] += result['cost']['input_cost']
+                    llm_processing_cost['output_cost'] += result['cost']['output_cost']
+
                     yield {
                         'is_complete': False,
                         'message': f"已生成 {len(all_replies)} 条回复消息， 完成度 {i*batch_size / len(messages_list) * 100:.2f}%",
+                        'llm_processing_cost': llm_processing_cost,
                         'total_replies_count': total_replies_count,
                         'replies': all_replies,
                         'timestamp': datetime.now().isoformat()
@@ -1550,6 +1527,7 @@ class CustomerAgent:
             yield {
                 'is_complete': True,
                 'message': "批量生成客户回复消息完成",
+                'llm_processing_cost': llm_processing_cost,
                 'total_replies_count': total_replies_count,
                 'replies': all_replies,
                 'timestamp': datetime.now().isoformat()
@@ -1561,6 +1539,7 @@ class CustomerAgent:
                 'is_complete': True,
                 'error': str(e),
                 'message': f"批量生成回复消息时发生错误: {str(e)}",
+                'llm_processing_cost': llm_processing_cost,
                 'total_replies_count': total_replies_count,
                 'replies': all_replies,
                 'timestamp': datetime.now().isoformat()

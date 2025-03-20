@@ -85,7 +85,6 @@ async def fetch_video_comments(
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "aweme_id": aweme_id,
-        "comments": []
     }
 
     async def process_video_comments():
@@ -94,42 +93,32 @@ async def fetch_video_comments(
             task_results[task_id]["status"] = "processing"
             task_results[task_id]["message"] = "正在获取视频评论数据...请过10秒+后再查看"
 
-            all_comments = []
-            start_time = time.time()
-
             async for result in customer_agent.fetch_video_comments(
                     aweme_id=aweme_id,
                     ins_filter=ins_filter,
                     twitter_filter=twitter_filter,
                     region_filter=region_filter
             ):
+                task_results[task_id]["aweme_id"] = result["aweme_id"]
+                task_results[task_id]["message"] = result['message']
+                task_results[task_id]["total_collected_comments"] = result["total_collected_comments"]
+                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["processing_time_ms"] = result['processing_time_ms']
+
                 # 检查是否出错
                 if 'error' in result:
                     task_results[task_id]["status"] = "failed"
-                    task_results[task_id]["aweme_id"] = result["aweme_id"]
-                    task_results[task_id]["message"] = f"任务失败/只返回已处理数据: {result['error']}"
-                    task_results[task_id]["comments"] = result["comments"]
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                    task_results[task_id]["comments"] = result['comments']
                     return
 
-                # 处理批量结果
-                if not result['is_complete']:
-                    all_comments.extend(result['current_batch_comments'])
-                    task_results[task_id]["status"] = "in_progress"
-                    task_results[task_id]["aweme_id"] = result["aweme_id"]
-                    task_results[task_id]["message"] = f"已获取 {len(all_comments)} 条评论"
-                    task_results[task_id]["comments"] = all_comments
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
-
-                # 检查任务是否完成
                 if result['is_complete']:
-                    processing_time = round((time.time() - start_time) * 1000, 2)
                     task_results[task_id]["status"] = "completed"
-                    task_results[task_id]["message"] = f"任务完成，共获取 {len(all_comments)} 条评论"
-                    task_results[task_id]["comments"] = all_comments
-                    task_results[task_id]["processing_time_ms"] = processing_time
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                    task_results[task_id]["comments"] = result['comments']
                     break
+                else:
+                    task_results[task_id]["status"] = "in_progress"
+                    task_results[task_id]["current_batch_count"] = result['current_batch_count']
+                    task_results[task_id]["current_batch_comments"] = result['current_batch_comments']
 
         except Exception as e:
             logger.error(f"后台任务处理视频 '{aweme_id}' 潜在客户时出错: {str(e)}")
@@ -210,7 +199,6 @@ async def stream_potential_customers(
             # 更新任务状态
             task_results[task_id]["status"] = "processing"
             task_results[task_id]["message"] = "正在获取视频评论数据...请过10秒+后再查看"
-            start_time = time.time()
 
             # 使用流式API
             async for result in customer_agent.stream_potential_customers(
@@ -224,6 +212,7 @@ async def stream_potential_customers(
             ):
                 task_results[task_id]["aweme_id"] = result["aweme_id"]
                 task_results[task_id]["message"] = result['message']
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 task_results[task_id]["customer_count"] = result["customer_count"]
                 task_results[task_id]["potential_customers"] = result["potential_customers"]
                 task_results[task_id]["processing_time_ms"] = result['processing_time_ms']
@@ -232,7 +221,6 @@ async def stream_potential_customers(
                 if 'error' in result:
                     task_results[task_id]["status"] = "failed"
                     return
-
                 # 处理批量结果并检查是否完成
                 if not result['is_complete']:
                     task_results[task_id]["status"] = "in_progress"
@@ -335,6 +323,7 @@ async def stream_keyword_potential_customers(
             ):
                 task_results[task_id]["keyword"] = result["keyword"]
                 task_results[task_id]["message"] = result['message']
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 task_results[task_id]["total_collected_customers"] = result['customer_count']
                 task_results[task_id]["potential_customers"] = result['potential_customers']
                 task_results[task_id]["processing_time_ms"] = result['processing_time_ms']
@@ -419,7 +408,6 @@ async def fetch_purchase_intent_analysis(
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "aweme_id": aweme_id,
-        "results": []
     }
 
     # 定义后台任务
@@ -437,15 +425,18 @@ async def fetch_purchase_intent_analysis(
             ):
                 task_results[task_id]["aweme_id"] = result["aweme_id"]
                 task_results[task_id]["message"] = result["message"]
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 task_results[task_id]["total_collected_comments"] = result["total_collected_comments"]
                 task_results[task_id]["total_analyzed_comments"] = result["total_analyzed_comments"]
                 task_results[task_id]["analysis_summary"] = result["analysis_summary"],
-                task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["timestamp"] = result["timestamp"]
+                task_results[task_id]["processing_time_ms"] = result['processing_time_ms']
                 if 'error' in result:
                     task_results[task_id]["status"] = "failed"
                     return
                 if result['is_complete']:
                     task_results[task_id]["status"] = "completed"
+                    task_results[task_id]["report_url"] = result["report_url"]
                     break
                 elif not result['is_complete']:
                     task_results[task_id]["status"] = "in_progress"
@@ -538,6 +529,7 @@ async def generate_single_reply(
                 customer_message=customer_message
             ):
                 task_results[task_id]["customer_id"] = result["customer_id"]
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 task_results[task_id]["message"] = result["message"]
                 task_results[task_id]["reply_message"] = result["reply_message"]
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
@@ -648,6 +640,7 @@ async def generate_batch_replies(
                 batch_size=batch_size
             ):
                 task_results[task_id]["message"] = result["message"]
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 task_results[task_id]["total_replies_count"] = result["total_replies_count"]
                 task_results[task_id]["replies"] = result["replies"]
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
