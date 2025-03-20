@@ -91,8 +91,6 @@ async def fetch_user_profile_analysis(
                 task_results[task_id]["user_profile_url"] = result['user_profile_url']
                 task_results[task_id]["message"] = result['message']
                 task_results[task_id]["uniqueId"] = result['uniqueId']
-                if 'report_url' in result:
-                    task_results[task_id]["report_url"] = result['report_url']
                 task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 task_results[task_id]["profile_data"] = result['profile_data']
                 task_results[task_id]["timestamp"] = result['timestamp']

@@ -1384,7 +1384,7 @@ class UserAgent:
                 print(fans_count)
                 print(max_fans)
                 remain = max_fans - fans_count
-                if remain >= len(cleaned_fans):
+                if remain > len(cleaned_fans):
                     fans_data.extend(cleaned_fans)
                     fans_count += len(cleaned_fans)
                     yield {
@@ -1396,7 +1396,7 @@ class UserAgent:
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
-                elif remain < len(cleaned_fans):
+                elif remain <= len(cleaned_fans):
                     fans_data.extend(cleaned_fans[:remain])
                     fans_count += remain
                     break
