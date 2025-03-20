@@ -43,13 +43,13 @@ async def get_user_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
 
 @router.post(
     "/fetch_user_profile_analysis",
-    summary="【一键直达】快速分析TikTok用户/达人基础信息",
+    summary="快速分析TikTok用户/达人基础信息",
     description="""
 用途:
   * 后台创建指定TikTok用户/达人基础信息分析任务
+  * 获取指定用户/达人的基础信息，包括昵称、简介、粉丝数，点赞数，发帖数，公司信息等
   * 分析用户/达人的基础资料和数据指标
   * 生成分析报告并提供访问链接
-  * 包括用户唯一ID、原始数据、报告URL、处理时间戳等信息
 
 参数:
   * url: TikTok用户主页URL，格式为https://tiktok.com/@username
@@ -75,26 +75,32 @@ async def fetch_user_profile_analysis(
 
     # 初始化任务状态
     task_results[task_id] = {
-        "status": "pending",
+        "status": "in_progress",
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "user_profile_url": url,
-        "profile_raw_data": {}
     }
 
     async def process_user_profile():
         try:
             # 更新任务状态
-            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["status"] = "in_progress"
             task_results[task_id]["message"] = "正在分析用户/达人基础信息...请过10秒+后再查看"
 
             async for result in user_agent.fetch_user_profile_analysis(url=url):
-                task_results[task_id]["timestamp"] = result['timestamp']
                 task_results[task_id]["user_profile_url"] = result['user_profile_url']
-                task_results[task_id]["uniqueId"] = result['uniqueId']
-                task_results[task_id]["analysis_report"] = result['analysis_report']
-                task_results[task_id]["profile_raw_data"] = result['profile_raw_data']
                 task_results[task_id]["message"] = result['message']
+                task_results[task_id]["uniqueId"] = result['uniqueId']
+                if 'report_url' in result:
+                    task_results[task_id]["report_url"] = result['report_url']
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
+                task_results[task_id]["profile_data"] = result['profile_data']
+                task_results[task_id]["timestamp"] = result['timestamp']
+                task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                if 'report_url' in result:
+                    task_results[task_id]["report_url"] = result['report_url']
+
                 if 'error' in result:
                     task_results[task_id]["status"] = "failed"
                     break
@@ -102,7 +108,7 @@ async def fetch_user_profile_analysis(
                     task_results[task_id]["status"] = "completed"
                     break
                 else:
-                    task_results[task_id]["status"] = "pending"
+                    task_results[task_id]["status"] = "in_progress"
         except Exception as e:
             logger.error(f"后台任务处理用户 '{url}' 分析时出错: {str(e)}")
             task_results[task_id]["status"] = "failed"
@@ -116,7 +122,7 @@ async def fetch_user_profile_analysis(
     return create_response(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "in_progress",
             "message": "任务已创建，正在启动",
             "timestamp": datetime.now().isoformat()
         },
@@ -126,17 +132,17 @@ async def fetch_user_profile_analysis(
 
 @router.post(
     "/fetch_user_posts_stats",
-    summary="【一键直达】全面分析TikTok用户/达人发布作品统计",
+    summary="全面分析TikTok用户/达人发布作品统计",
     description="""
 用途:
   * 后台创建指定TikTok用户/达人作品统计分析任务
-  * 采集并分析用户/达人的所有发布作品数据
-  * 计算关键统计指标，包括平均互动数据、最高表现视频、发布频率等
-  * 支持限制分析的最大作品数量
+  * 采集并分析用户/达人的所有发布作品数据，按照最新发布时间排序
+  * 计算关键统计指标，包括平均互动数据、最高表现视频、发布频率等20多项指标
+  * 生成详细的作品统计报告
 
 参数:
   * url: TikTok用户主页URL，格式为https://tiktok.com/@username
-  * max_post: 最多分析的作品数量，可选，默认分析全部作品
+  * max_post: （可选）最多分析的作品数量，默认分析全部作品
 
 （深度内容分析，助您全面了解创作者表现！）
 """,
@@ -160,27 +166,25 @@ async def fetch_user_posts_stats(
 
     # 初始化任务状态
     task_results[task_id] = {
-        "status": "pending",
+        "status": "in_progress",
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "url": url,
-        "total_post": 0,
-        "posts_data": [],
-        "posts_stats": {}
     }
 
     async def process_user_posts_stats():
         try:
             # 更新任务状态
-            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["status"] = "in_progress"
             task_results[task_id]["message"] = "正在分析用户/达人发布作品统计...请过10秒+后再查看"
 
             # 直接调用提供的方法进行数据采集和分析
             async for result in user_agent.fetch_user_posts_stats(url, max_post):
                 task_results[task_id]["message"] = result['message']
-                task_results[task_id]["total_posts"] = result['total_posts']
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
+                task_results[task_id]["total_collected_posts"] = result['total_collected_posts']
                 task_results[task_id]["posts_stats"] = result['posts_stats']
-                task_results[task_id]["posts_raw_data"] = result['posts_raw_data']
+                # task_results[task_id]["posts_data"] = result['posts_data']
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
                 task_results[task_id]["processing_time"] = result.get('processing_time', 0)
                 if 'report_url' in result:
@@ -194,7 +198,7 @@ async def fetch_user_posts_stats(
                     task_results[task_id]["status"] = "completed"
                     break
                 else:
-                    task_results[task_id]["status"] = "pending"
+                    task_results[task_id]["status"] = "in_progress"
         except Exception as e:
             logger.error(f"后台任务处理用户 '{url}' 发布作品统计时出错: {str(e)}")
             task_results[task_id]["status"] = "failed"
@@ -209,100 +213,105 @@ async def fetch_user_posts_stats(
     return create_response(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "in_progress",
             "message": "任务已创建，正在启动",
             "timestamp": datetime.now().isoformat()
         },
         success=True
     )
 
-    @router.post(
-        "/fetch_user_posts_trend",
-        summary="全面分析TikTok用户/达人发布作品趋势",
-        description="""
-    用途:
-      * 后台创建指定TikTok用户/达人作品趋势分析任务
-      * 采集并分析用户/达人的发布作品数据随时间的变化
-      * 计算时间段内的发布频率和互动数据变化趋势
-      * 支持自定义分析时间区间
+@router.post(
+    "/fetch_user_posts_trend",
+    summary="全面分析TikTok用户/达人发布作品趋势",
+    description="""
+用途:
+  * 后台创建指定TikTok用户/达人作品趋势分析任务
+  * 采集并分析用户/达人的发布作品数据随时间的变化
+  * 计算时间段内的发布频率和互动数据变化趋势 （每天发布数量、点赞量，评论量等4种趋势）
+  * 支持自定义分析时间区间
 
-    参数:
-      * url: TikTok用户主页URL，格式为https://tiktok.com/@username
-      * time_interval: 分析的时间区间，如"90D"表示90天，默认为90天
+参数:
+  * url: TikTok用户主页URL，格式为https://tiktok.com/@username
+  * time_interval: 分析的时间区间，如"90D"表示90天，默认为90天,
 
-    （深度趋势分析，助您掌握创作者成长轨迹！）
+（深度趋势分析，助您掌握创作者成长轨迹！）
     """,
-        response_model_exclude_none=True,
-    )
-    async def fetch_user_posts_trend(
-            request: Request,
-            background_tasks: BackgroundTasks,
-            url: str = Query(..., description="TikTok用户主页URL"),
-            time_interval: str = Query("90D", description="分析的时间区间，例如'90D'表示90天"),
-            user_agent: UserAgent = Depends(get_user_agent)
+    response_model_exclude_none=True,
+)
+async def fetch_user_posts_trend(
+        request: Request,
+        background_tasks: BackgroundTasks,
+        url: str = Query(..., description="TikTok用户主页URL"),
+        time_interval: str = Query("90D", description="分析的时间区间，例如'90D'表示90天"),
+        user_agent: UserAgent = Depends(get_user_agent)
     ):
-        """
-        分析TikTok用户/达人的发布作品趋势
+    """
+    分析TikTok用户/达人的发布作品趋势
 
-        返回任务ID和初始状态
-        """
+    返回任务ID和初始状态
+    """
 
-        # 生成任务ID
-        task_id = f"posts_trend_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+    # 生成任务ID
+    task_id = f"posts_trend_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
-        # 初始化任务状态
-        task_results[task_id] = {
-            "status": "pending",
-            "message": "任务已创建，正在启动",
-            "timestamp": datetime.now().isoformat(),
-            "url": url,
-            "time_interval": time_interval,
-            "total_posts": 0,
-        }
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "in_progress",
+        "message": "任务已创建，正在启动",
+        "timestamp": datetime.now().isoformat(),
+        "url": url,
+        "time_interval": time_interval,
+    }
 
-        async def process_user_posts_trend():
-            try:
-                # 更新任务状态
-                task_results[task_id]["status"] = "processing"
-                task_results[task_id]["message"] = "正在分析用户/达人发布作品趋势...请过10秒+后再查看"
+    async def process_user_posts_trend():
+        try:
+            # 更新任务状态
+            task_results[task_id]["status"] = "in_progress"
+            task_results[task_id]["message"] = "正在分析用户/达人发布作品趋势...请过10秒+后再查看"
 
-                # 直接调用提供的方法进行数据采集和分析
-                async for result in user_agent.fetch_user_posts_trend(url, time_interval):
-                    task_results[task_id]["message"] = result['message']
-                    if 'report_url' in result:
-                        task_results[task_id]["report_url"] = result['report_url']
-                    task_results[task_id]["total_posts"] = result['total_posts']
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
-                    task_results[task_id]["processing_time"] = result.get('processing_time', 0)
-
-                    # 处理进度更新
-                    if 'error' in result:
-                        task_results[task_id]["status"] = "failed"
-                        break
-                    if result['is_complete']:
-                        task_results[task_id]["status"] = "completed"
-                        break
-                    else:
-                        task_results[task_id]["status"] = "processing"
-            except Exception as e:
-                logger.error(f"后台任务处理用户 '{url}' 发布作品趋势时出错: {str(e)}")
-                task_results[task_id]["status"] = "failed"
-                task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            # 直接调用提供的方法进行数据采集和分析
+            async for result in user_agent.fetch_user_posts_trend(url, time_interval):
+                task_results[task_id]["message"] = result['message']
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
+                task_results[task_id]["total_collected_posts"] = result['total_collected_posts']
+                # task_results[task_id]["posts_data"] = result['posts_data']
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
+                task_results[task_id]["processing_time"] = result.get('processing_time', 0)
 
-        # 添加后台任务
-        background_tasks.add_task(process_user_posts_trend)
+                if 'report_url' in result:
+                    task_results[task_id]["report_url"] = result['report_url']
 
-        # 返回任务信息
-        return create_response(
-            data={
-                "task_id": task_id,
-                "status": "pending",
-                "message": "任务已创建，正在启动",
-                "timestamp": datetime.now().isoformat()
-            },
-            success=True
-        )
+                if 'trends_data' in result:
+                    task_results[task_id]["trends_data"] = result['trends_data']
+
+                # 处理进度更新
+                if 'error' in result:
+                    task_results[task_id]["status"] = "failed"
+                    break
+                if result['is_complete']:
+                    task_results[task_id]["status"] = "completed"
+                    break
+                else:
+                    task_results[task_id]["status"] = "in_progress"
+        except Exception as e:
+            logger.error(f"后台任务处理用户 '{url}' 发布作品趋势时出错: {str(e)}")
+            task_results[task_id]["status"] = "failed"
+            task_results[task_id]["message"] = f"任务处理出错: {str(e)}"
+            task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    # 添加后台任务
+    background_tasks.add_task(process_user_posts_trend)
+
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "in_progress",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
 
 @router.post(
@@ -339,31 +348,31 @@ async def fetch_post_duration_and_time_distribution(
 
     # 初始化任务状态
     task_results[task_id] = {
-        "status": "pending",
+        "status": "in_progress",
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "url": url,
-        "total_posts": 0,
-        "duration_distribution": {},
-        "time_distribution": {}
     }
 
     async def process_duration_and_time_distribution():
         try:
             # 更新任务状态
-            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["status"] = "in_progress"
             task_results[task_id]["message"] = "正在分析用户/达人发布作品时长与时间分布...请过10秒+后再查看"
 
             # 直接调用提供的方法进行数据采集和分析
             async for result in user_agent.fetch_post_duration_and_time_distribution(url):
                 task_results[task_id]["message"] = result['message']
-                if 'report_url' in result:
-                    task_results[task_id]["report_url"] = result['report_url']
-                task_results[task_id]["total_posts"] = result['total_posts']
-                task_results[task_id]["duration_distribution"] = result.get('duration_distribution', {})
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
+                task_results[task_id]["total_collected_posts"] = result['total_collected_posts']
+                task_results[task_id]["duration_distribution"] = result['duration_distribution']
                 task_results[task_id]["time_distribution"] = result.get('time_distribution', {})
+                # task_results[task_id]["posts_data"] = result['posts_data']
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
                 task_results[task_id]["processing_time"] = result.get('processing_time', 0)
+
+                if 'report_url' in result:
+                    task_results[task_id]["report_url"] = result['report_url']
 
                 # 处理进度更新
                 if 'error' in result:
@@ -373,7 +382,7 @@ async def fetch_post_duration_and_time_distribution(
                     task_results[task_id]["status"] = "completed"
                     break
                 else:
-                    task_results[task_id]["status"] = "processing"
+                    task_results[task_id]["status"] = "in_progress"
         except Exception as e:
             logger.error(f"后台任务处理用户 '{url}' 发布作品时长与时间分布时出错: {str(e)}")
             task_results[task_id]["status"] = "failed"
@@ -387,7 +396,7 @@ async def fetch_post_duration_and_time_distribution(
     return create_response(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "in_progress",
             "message": "任务已创建，正在启动",
             "timestamp": datetime.now().isoformat()
         },
@@ -402,7 +411,7 @@ async def fetch_post_duration_and_time_distribution(
   * 后台创建指定TikTok用户/达人话题标签分析任务
   * 采集并分析用户/达人所有作品中使用的话题标签
   * 统计话题标签使用频率，获取最常用的热门标签
-  * 生成详细的标签使用报告
+  * 生成详细的标签使用报告, 提供产品分析和赛道分析
 
 参数:
   * url: TikTok用户主页URL，格式为https://tiktok.com/@username
@@ -430,7 +439,7 @@ async def fetch_post_hashtags(
 
     # 初始化任务状态
     task_results[task_id] = {
-        "status": "pending",
+        "status": "in_progress",
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "url": url,
@@ -441,16 +450,18 @@ async def fetch_post_hashtags(
     async def process_post_hashtags():
         try:
             # 更新任务状态
-            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["status"] = "in_progress"
             task_results[task_id]["message"] = "正在分析用户/达人使用的热门话题标签...请过10秒+后再查看"
 
             # 直接调用提供的方法进行数据采集和分析
             async for result in user_agent.fetch_post_hashtags(url, max_hashtags):
                 task_results[task_id]["message"] = result['message']
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 if 'report_url' in result:
                     task_results[task_id]["report_url"] = result['report_url']
-                task_results[task_id]["total_posts"] = result['total_posts']
+                task_results[task_id]["total_collected_posts"] = result['total_collected_posts']
                 task_results[task_id]["top_hashtags"] = result.get('top_hashtags', {})
+                # task_results[task_id]["posts_data"] = result['posts_data']
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
                 task_results[task_id]["processing_time"] = result.get('processing_time', 0)
 
@@ -462,7 +473,7 @@ async def fetch_post_hashtags(
                     task_results[task_id]["status"] = "completed"
                     break
                 else:
-                    task_results[task_id]["status"] = "processing"
+                    task_results[task_id]["status"] = "in_progress"
         except Exception as e:
             logger.error(f"后台任务处理用户 '{url}' 热门话题标签分析时出错: {str(e)}")
             task_results[task_id]["status"] = "failed"
@@ -476,7 +487,7 @@ async def fetch_post_hashtags(
     return create_response(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "in_progress",
             "message": "任务已创建，正在启动",
             "timestamp": datetime.now().isoformat()
         },
@@ -518,27 +529,27 @@ async def fetch_post_creator_analysis(
 
     # 初始化任务状态
     task_results[task_id] = {
-        "status": "pending",
+        "status": "in_progress",
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "url": url,
-        "total_posts": 0,
-        "analysis_results": {}
     }
 
     async def process_post_creator_analysis():
         try:
             # 更新任务状态
-            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["status"] = "in_progress"
             task_results[task_id]["message"] = "正在分析创作者视频内容特征...请过10秒+后再查看"
 
             # 直接调用提供的方法进行数据采集和分析
             async for result in user_agent.fetch_post_creator_analysis(url):
                 task_results[task_id]["message"] = result['message']
+                task_results[task_id]["llm_processing_cost"] = result['llm_processing_cost']
                 if 'report_url' in result:
                     task_results[task_id]["report_url"] = result['report_url']
-                task_results[task_id]["total_posts"] = result['total_posts']
+                task_results[task_id]["total_collected_posts"] = result['total_collected_posts']
                 task_results[task_id]["analysis_results"] = result.get('analysis_results', {})
+                # task_results[task_id]["posts_data"] = result['posts_data']
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
                 task_results[task_id]["processing_time"] = result.get('processing_time', 0)
 
@@ -550,7 +561,7 @@ async def fetch_post_creator_analysis(
                     task_results[task_id]["status"] = "completed"
                     break
                 else:
-                    task_results[task_id]["status"] = "processing"
+                    task_results[task_id]["status"] = "in_progress"
         except Exception as e:
             logger.error(f"后台任务处理用户 '{url}' 创作者视频内容特征分析时出错: {str(e)}")
             task_results[task_id]["status"] = "failed"
@@ -564,7 +575,7 @@ async def fetch_post_creator_analysis(
     return create_response(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "in_progress",
             "message": "任务已创建，正在启动",
             "timestamp": datetime.now().isoformat()
         },
@@ -578,8 +589,7 @@ async def fetch_post_creator_analysis(
 用途:
   * 后台创建指定TikTok用户/达人粉丝采集任务
   * 采集用户/达人的粉丝列表和基本信息
-  * 提供粉丝画像数据，了解粉丝群体特征
-  * 支持限制采集的最大粉丝数量
+  * 最大采集粉丝数量为10000，超过部分不采集
 
 参数:
   * url: TikTok用户主页URL，格式为https://tiktok.com/@username
@@ -607,27 +617,23 @@ async def fetch_user_fans(
 
     # 初始化任务状态
     task_results[task_id] = {
-        "status": "pending",
+        "status": "in_progress",
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "url": url,
-        "total_fans": 0,
-        "fans_count": 0
     }
 
     async def process_user_fans():
         try:
             # 更新任务状态
-            task_results[task_id]["status"] = "processing"
+            task_results[task_id]["status"] = "in_progress"
             task_results[task_id]["message"] = "正在获取用户粉丝数据...请过10秒+后再查看"
 
             # 直接调用提供的方法进行数据采集和分析
             async for result in user_agent.fetch_user_fans(url, max_fans):
                 task_results[task_id]["message"] = result['message']
-                task_results[task_id]["total_fans"] = result['total_fans']
-                if 'fans' in result:
-                    task_results[task_id]["fans"] = result['fans']
-                    task_results[task_id]["fans_count"] = len(result['fans'])
+                task_results[task_id]["total_collected_fans"] = result['total_collected_fans']
+                task_results[task_id]["fans"] = result['fans']
                 task_results[task_id]["timestamp"] = datetime.now().isoformat()
                 task_results[task_id]["processing_time"] = result.get('processing_time', 0)
 
@@ -639,7 +645,7 @@ async def fetch_user_fans(
                     task_results[task_id]["status"] = "completed"
                     break
                 else:
-                    task_results[task_id]["status"] = "processing"
+                    task_results[task_id]["status"] = "in_progress"
         except Exception as e:
             logger.error(f"后台任务处理用户 '{url}' 粉丝采集时出错: {str(e)}")
             task_results[task_id]["status"] = "failed"
@@ -653,7 +659,7 @@ async def fetch_user_fans(
     return create_response(
         data={
             "task_id": task_id,
-            "status": "pending",
+            "status": "in_progress",
             "message": "任务已创建，正在启动",
             "timestamp": datetime.now().isoformat()
         },

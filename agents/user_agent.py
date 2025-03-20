@@ -119,153 +119,6 @@ class UserAgent:
 
             Please generate a comprehensive report that would be valuable for both the account owner and social media managers.
                     """,
-            "post_analysis": """你是一位专业的数据分析师，专门为社交媒体营销和TikTok影响者数据分析提供深度解读。你的任务是基于提供的TikTok网红统计数据，生成一份完整的 报告，该报告应包含 关键数据摘要、可视化趋势图、内容分析及结论建议，并符合以下内容要求：
-            # TikTok 影响者数据分析报告
-
-            📌 1️⃣ Markdown 结构
-            - 标题层级清晰，以 `#` 作为标题标记，确保内容清晰可读。
-            - 数据表格（Tables） 以 `|` 分隔，表头使用 `|---|---|` 进行格式化，便于展示账号的核心数据。
-            - 适当使用 `**加粗**` 和 `-` 进行列表划分，确保层次分明，信息直观。
-
-            ---
-
-            ## 📊 2️⃣ 可视化图表
-            你需要根据 `post_trend` 生成以下六个图表，并返回 **Markdown 形式的图片链接（或 Base64 图片）**：
-
-            ### **📅 每日发帖数趋势（折线图）**
-            - **描述**: 展示每日发帖数量的变化趋势。
-            - **数据源**: `post_trend.post_trend` (x 轴: 日期, y 轴: 发帖数)
-            - **图表示例**:
-              ![每日发帖趋势](<图片URL>)
-
-            ### **👍 每日点赞趋势（折线图）**
-            - **描述**: 反映用户点赞的增长趋势。
-            - **数据源**: `interaction_trend.digg_count` (x 轴: 日期, y 轴: 点赞数)
-            - **图表示例**:
-              ![每日点赞趋势](<图片URL>)
-
-            ### **💬 每日评论趋势（折线图）**
-            - **描述**: 观察每日评论数量的变化，判断受众互动活跃度。
-            - **数据源**: `interaction_trend.comment_count` (x 轴: 日期, y 轴: 评论数)
-            - **图表示例**:
-              ![每日评论趋势](<图片URL>)
-
-            ### **🔄 每日分享趋势（折线图）**
-            - **描述**: 追踪每日分享次数，评估内容的传播能力。
-            - **数据源**: `interaction_trend.share_count` (x 轴: 日期, y 轴: 分享数)
-            - **图表示例**:
-              ![每日分享趋势](<图片URL>)
-
-            ### **▶️ 每日播放趋势（折线图）**
-            - **描述**: 展示每日播放量的波动情况，评估视频的整体表现。
-            - **数据源**: `interaction_trend.play_count` (x 轴: 日期, y 轴: 播放数)
-            - **图表示例**:
-              ![每日播放趋势](<图片URL>)
-
-            ### **📊 视频时长分布（饼图）**
-            - **描述**: 统计视频时长分布，分析观众更喜欢的内容长度。
-            - **数据源**: `post_duration_distribution`
-            - **图表示例**:
-              ![视频时长分布](<图片URL>)
-
-            ---
-
-            ## 📊 3️⃣ 账号数据概览
-
-            ### **核心统计数据**
-            | 统计项 | 数值 |
-            |---|---|
-            | **帖子总数** | X |
-            | **总点赞数** | X |
-            | **总评论数** | X |
-            | **总分享数** | X |
-            | **总播放数** | X |
-            | **总下载数** | X |
-            | **总AI生成视频数** | X |
-            | **总VR视频数** | X |
-            | **总广告视频数** | X |
-
-            ### **计算指标**
-            | 统计项 | 数值 |
-            |---|---|
-            | **平均点赞数** | X |
-            | **平均评论数** | X |
-            | **平均分享数** | X |
-            | **平均播放数** | X |
-            | **最高点赞数**（日期X） | X |
-            | **最高评论数**（日期X） | X |
-            | **最高分享数**（日期X） | X |
-            | **最高播放数**（日期X） | X |
-            | **总互动量**（点赞 + 评论 + 分享） | X |
-            | **点赞率** | X% |
-            | **评论率** | X% |
-            | **分享率** | X% |
-            | **播放转化率** | X% |
-
-            ---
-
-            ## 🔍 4️⃣ 关键趋势分析
-
-            ### **📈 账号增长趋势**
-            - 过去 7 天的 **平均发帖数**，与长期趋势对比，判断是否增长或下降。
-            - 点赞、评论、分享、播放的 **增长率**，评估账号受欢迎程度的变化。
-            - **最近30天内互动最高的帖子**：
-              - **发布时间**
-              - **视频内容**
-              - **热门话题**
-              - **成功关键因素**
-            - **是否存在增长瓶颈**（如点赞率下降、播放量减少等）。
-
-            ### **🎯 内容互动分析**
-            - **点赞最高的帖子**（分析发布时间、内容类型）
-            - **评论最多的帖子**（是否引发讨论、争议）
-            - **分享最多的帖子**（是否具有病毒传播特性）
-            - **最高播放量帖子**（分析视频质量、音乐、封面、标题等）
-
-            ### **🕒 最佳发布时间分析**
-            - **计算平均发布时间的黄金时段**
-            - **分析工作日 vs. 周末 的互动差异**
-            - **找出增长最快的时间点**
-
-            ### **⏳ 视频时长表现**
-            - 统计 **不同时长区间的平均互动率**
-            - 评估 **短视频 vs. 长视频 哪种效果更好**
-            - 观众更喜欢的 **时长（如15-30s 是否表现最佳）**
-
-            ### **🏷️ 热门标签分析**
-            - **Top 5 hashtags 使用频率**
-            - **评估标签对互动的影响**
-            - **哪些标签带来更多流量**
-            - **推荐使用高互动标签**
-            - **图表示例**：
-              ![热门标签使用频率](<图片URL>)
-
-            ---
-
-            ## 🎯 5️⃣ 结论与优化建议
-
-            ### **🕒 最佳发布时间**
-            - 建议在 **`X 时段`** 发布内容，以最大化曝光率和互动率。
-
-            ### **🔥 热门标签建议**
-            - 例如 **`#farmacia #farma #cuidadodelapiel #skincare`** 可能提高曝光。
-            - 是否调整标签策略，如结合更多趋势标签（**#healthtips #beautytips**）。
-
-            ### **🚀 短视频 vs. 长视频优化策略**
-            - 如果 **短视频（15-30s）表现最佳**，建议保持该策略。
-            - 如果 **长视频（60s+）互动较差**，建议减少发布频率或调整内容策略。
-
-            ### **📈 账号趋势评估**
-            - **当前账号是增长还是下降趋势？**
-            - **如果上升，如何维持增长？如果下降，如何优化？**
-            - **互动数据是否健康？点赞多但评论、分享少？如何优化？**
-
-            ### **📢 未来优化策略**
-            - **内容创新**
-            - **用户互动**
-            - **跨平台引流**
-            ---
-            """,
             "post_stats_analysis": """
                 # System Prompt: TikTok Analytics Report Generator        
                 You are an expert data analyst specializing in social media metrics. Your task is to generate a comprehensive, well-formatted report based on TikTok account analytics data. The user will provide a JSON object containing various metrics about their TikTok posts. You should analyze this data and create a professional report with the following components:          
@@ -434,7 +287,7 @@ class UserAgent:
 
     """---------------------------------------------通用方法/工具类方法---------------------------------------------"""
 
-    async def generate_analysis_report(self, uniqueId: str, analysis_type: str, data: Dict[str, Any]) -> str:
+    async def generate_analysis_report(self, uniqueId: str, analysis_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         """
         生成报告并转换为HTML
 
@@ -462,7 +315,7 @@ class UserAgent:
                 user_prompt=user_prompt
             )
 
-            report = response["choices"][0]["message"]["content"].strip()
+            report = response['response']["choices"][0]["message"]["content"].strip()
 
             # 保存Markdown报告
             report_dir = "reports"
@@ -491,7 +344,11 @@ class UserAgent:
                 # Windows路径需要转换为URL格式
                 file_url = file_url.replace('\\', '/')
 
-            return file_url
+            return {
+                "report_url": file_url,
+                "cost": response["cost"]
+            }
+
         except Exception as e:
             logger.error(f"生成报告时发生错误: {str(e)}")
             raise
@@ -552,8 +409,25 @@ class UserAgent:
     async def fetch_user_profile_analysis(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析用户/达人的基础信息
+
+        Args:
+            url (str): TikTok用户/达人主页URL
+
+        Returns:
+            Dict包含:
+            - user_profile_url: 用户/达人主页URL
+            - is_complete: 是否分析完成
+            - message: 分析消息
+            - uniqueId: 用户ID
+            - llm_processing_cost: LLM处理成本
+            - profile_data: 用户/达人基础信息
+            - timestamp: 时间戳
+            - processing_time: 处理时间
         """
         start_time = time.time()
+        llm_processing_cost = {}
+        profile_data = {}
+        uniqueId = ""
         if not url or not re.match(r"https://(www\.)?tiktok\.com/@[\w\.-]+", url):
             raise ValueError("Invalid TikTok user profile URL")
 
@@ -562,17 +436,17 @@ class UserAgent:
                 "user_profile_url": url,
                 "is_complete": False,
                 "message": '正在采集用户/达人{}的基础信息...请耐心等待'.format(url),
-                "uniqueId": '',
-                "analysis_report": '',
-                "profile_raw_data": {},
+                "uniqueId": uniqueId,
+                "llm_processing_cost":llm_processing_cost,
+                "profile_data": profile_data,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "processing_time": round(time.time() - start_time, 2)
             }
 
-            data = await self.user_collector.fetch_user_profile(url)
-            data = await self.user_cleaner.clean_user_profile(data)
+            profile_data = await self.user_collector.fetch_user_profile(url)
+            profile_data = await self.user_cleaner.clean_user_profile(profile_data)
 
-            uniqueId = data['accountIdentifiers']['uniqueId']
+            uniqueId = profile_data['accountIdentifiers']['uniqueId']
 
             logger.info("正在分析用户/达人基础信息...")
 
@@ -580,22 +454,25 @@ class UserAgent:
                 "user_profile_url": url,
                 "is_complete": False,
                 "message": f"已完成用户/达人{url}的信息采集， 正在生成分析报告...",
-                "uniqueId": '',
-                "analysis_report": '',
-                "profile_raw_data": {},
+                "uniqueId": uniqueId,
+                "llm_processing_cost":llm_processing_cost,
+                "profile_data": profile_data,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "processing_time": round(time.time() - start_time, 2)
             }
 
-            report_url = await self.generate_analysis_report(uniqueId, 'profile_analysis', data)
+            report_result = await self.generate_analysis_report(uniqueId, 'profile_analysis', profile_data)
+            report_url = report_result["report_url"]
+            llm_processing_cost = report_result["cost"]
 
             yield {
                 "user_profile_url": url,
                 "is_complete": True,
-                "message": f"已完成用户/达人{url}的基础信息分析，报告已生成",
+                "message": f"已完成用户/达人的基础信息分析，请在report_url查看结果",
                 "uniqueId": uniqueId,
-                "profile_raw_data": data,
-                "analysis_report": report_url,
+                "report_url": report_url,
+                "llm_processing_cost":llm_processing_cost,
+                "profile_data": profile_data,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "processing_time": round(time.time() - start_time, 2)
             }
@@ -604,22 +481,44 @@ class UserAgent:
             yield {
                 "user_profile_url": url,
                 "is_complete": False,
-                'error': str(e),
-                'message': f"分析用户/达人{url}基础信息时发生错误: {str(e)}",
-                "uniqueId": '',
-                "profile_raw_data": {},
-                "analysis_report": '',
+                "error": str(e),
+                "message": f"分析用户/达人{url}基础信息时发生错误: {str(e)}",
+                "uniqueId": uniqueId,
+                "llm_processing_cost":llm_processing_cost,
+                "profile_data": profile_data,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "processing_time": round(time.time() - start_time, 2)
             }
+            return
 
     async def fetch_user_posts_stats(self, url: str, max_post: Optional[int]) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析用户/达人的发布作品统计
+
+        Args:
+            url (str): TikTok用户/达人主页URL
+            max_post (int): 最大作品数
+
+        Returns:
+            Dict包含:
+            - user_profile_url: 用户/达人主页URL
+            - is_complete: 是否分析完成
+            - message: 分析消息
+            - llm_processing_cost: LLM处理成本
+            - total_collected_posts: 总采集作品数
+            - posts_stats: 作品统计数据
+            - posts_data: 作品数据
+            - timestamp: 时间戳
+            - processing_time: 处理时间
         """
+        if not url or not re.match(r"https://(www\.)?tiktok\.com/@[\w\.-]+", url):
+            raise ValueError("Invalid TikTok user profile URL")
+
         post_count = 0
+        llm_processing_cost = 0
         start_time = time.time()
-        posts_raw_data = []
+
+        posts_data = []
         posts_stats = {}
         total_posts = await self.user_collector.fetch_total_posts_count(url)
         max_post = min(max_post, total_posts)
@@ -631,25 +530,26 @@ class UserAgent:
                 cleaned_posts = await self.user_cleaner.clean_user_posts(posts)
                 if cleaned_posts:
                     if post_count + len(cleaned_posts) <= max_post:
-                        posts_raw_data.extend(cleaned_posts)
+                        posts_data.extend(cleaned_posts)
                         post_count += len(cleaned_posts)
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 进度: {post_count}/{max_post}...',
-                            'total_posts': post_count,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
                             'posts_stats': posts_stats,
-                            'posts_raw_data': posts_raw_data,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
                     else:
-                        posts_raw_data.extend(cleaned_posts[:max_post - post_count])
+                        posts_data.extend(cleaned_posts[:max_post - post_count])
                         post_count = max_post
                         logger.info(f"已采集{post_count}条作品数据, 完成")
                         break
             # 使用pandas进行数据处理
-            df = pd.DataFrame(posts_raw_data)
+            df = pd.DataFrame(posts_data)
 
             # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
             df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
@@ -714,18 +614,22 @@ class UserAgent:
 
             uniqueId = url.split("@")[-1]
 
-            report_url = await self.generate_analysis_report(uniqueId, 'post_stats_analysis', stats)
+            report_result = await self.generate_analysis_report(uniqueId, 'post_stats_analysis', stats)
+
+            report_url = report_result["report_url"]
+            llm_processing_cost = report_result["cost"]
 
             logger.info(f"已完成用户 {url} 发布作品统计分析")
 
             yield {
                 'user_profile_url': url,
                 'is_complete': True,
-                'message': f'已完成发布作品统计分析',
+                'message': f'已完成发布作品统计分析，请在report_url查看结果',
+                'llm_processing_cost': llm_processing_cost,
                 'report_url': report_url,
-                'total_posts': post_count,
+                'total_collected_posts': post_count,
                 'posts_stats': stats,
-                'posts_raw_data': posts_raw_data,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -736,12 +640,14 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析发布作品统计时发生错误: {str(e)}",
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'posts_stats': posts_stats,
-                'posts_raw_data': posts_raw_data,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
+            return
 
     async def fetch_user_posts_trend(self, url: str, time_interval: str = '90D') -> AsyncGenerator[
         Dict[str, Any], None]:
@@ -754,13 +660,27 @@ class UserAgent:
 
         Returns:
             Dict包含:
-            - post_trend: 发布趋势数据
-            - interaction_trend: 互动趋势数据
+            - user_profile_url: 用户/达人主页URL
+            - is_complete: 是否分析完成
+            - message: 分析消息
+            - llm_processing_cost: LLM处理成本
+            - total_collected_posts: 总采集作品数
+            - timestamp: 时间戳
+            - processing_time: 处理时间
         """
         post_count = 0
+        if not url or not re.match(r"https://(www\.)?tiktok\.com/@[\w\.-]+", url):
+            raise ValueError("Invalid TikTok user profile URL")
+
+        # 如果time_interval不是有效的时间间隔，引发异常
+        if not re.match(r"\d+[D]", time_interval):
+            raise ValueError("Invalid time interval. Please use a valid interval like '30D' for 30 days")
+
         start_time = time.time()
-        posts_raw_data = []
+        posts_data = []
+        llm_processing_cost = 0
         total_posts = await self.user_collector.fetch_total_posts_count(url)
+
 
         logger.info("正在分析发布作品趋势统计...")
 
@@ -771,26 +691,28 @@ class UserAgent:
                 if cleaned_posts:
                     post_count += len(cleaned_posts)
                     if post_count <= post_count:
-                        posts_raw_data.extend(cleaned_posts)
+                        posts_data.extend(cleaned_posts)
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            '': post_count,
-                            # 'posts_raw_data': posts_raw_data,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
                     elif post_count > total_posts:
-                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        posts_data.extend(cleaned_posts[:total_posts - post_count])
                         post_count = total_posts
                         logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                            'total_posts': post_count,
-                            # 'posts_raw_data': posts_raw_data,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
@@ -801,15 +723,16 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                        'total_posts': post_count,
-                        # 'posts_raw_data': posts_raw_data,
+                        'llm_processing_cost': llm_processing_cost,
+                        'total_collected_posts': post_count,
+                        #'posts_data': posts_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
                     break
 
             # 使用pandas进行数据处理
-            df = pd.DataFrame(posts_raw_data)
+            df = pd.DataFrame(posts_data)
 
             # 转换时间并按发布时间排序 - 使用unit='s'指定输入是秒级时间戳
             df["create_time"] = pd.to_datetime(df["create_time"], unit='s')
@@ -855,15 +778,20 @@ class UserAgent:
             # print(json.dumps(trends_data, indent=4))
             uniqueId = url.split("@")[-1]
 
-            report_url = await self.generate_analysis_report(uniqueId, 'post_trend_analysis', trends_data)
+            report_result = await self.generate_analysis_report(uniqueId, 'post_trend_analysis', trends_data)
+            report_url = report_result["report_url"]
+            llm_processing_cost = report_result["cost"]
+
 
             yield {
                 'user_profile_url': url,
                 'is_complete': True,
-                'message': f'已完成发布作品趋势分析',
+                'message': f'已完成发布作品趋势分析，请在report_url查看结果',
+                'llm_processing_cost': llm_processing_cost,
                 'report_url': report_url,
-                'total_posts': post_count,
-                # 'posts_raw_data': posts_raw_data,
+                'trends_data': trends_data,
+                'total_collected_posts': post_count,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -875,8 +803,9 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析发布趋势时发生错误: {str(e)}",
-                'total_posts': post_count,
-                'posts_raw_data': posts_raw_data,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -885,13 +814,32 @@ class UserAgent:
     async def fetch_post_duration_and_time_distribution(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析用户/达人的发布作品时长分布
+
+        Args:
+            url: 用户/达人主页URL
+
+        Returns:
+            Dict包含:
+            - user_profile_url: 用户/达人主页URL
+            - is_complete: 是否分析完成
+            - message: 分析消息
+            - llm_processing_cost: LLM处理成本
+            - total_collected_posts: 总采集作品数
+            - duration_distribution: 时长分布
+            - time_distribution: 时间分布
+            - timestamp: 时间戳
+            - processing_time: 处理时间
         """
         logger.info("正在分析发布作品的时长分布以及时间分布...")
+        if not url or not re.match(r"https://(www\.)?tiktok\.com/@[\w\.-]+", url):
+            raise ValueError("Invalid TikTok user profile URL")
         start_time = time.time()
         post_count = 0
-        posts_raw_data = []
+        llm_processing_cost = 0
+        posts_data = []
         duration_distribution = time_distribution = {}
         total_posts = await self.user_collector.fetch_total_posts_count(url)
+
         try:
             # 采集用户发布的作品数据
             async for posts in self.user_collector.collect_user_posts(url):
@@ -899,26 +847,32 @@ class UserAgent:
                 if cleaned_posts:
                     post_count += len(cleaned_posts)
                     if post_count <= total_posts:
-                        posts_raw_data.extend(cleaned_posts)
+                        posts_data.extend(cleaned_posts)
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            'total_posts': post_count,
-                            # 'posts_raw_data': posts_raw_data,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
+                            'duration_distribution': duration_distribution,
+                            'time_distribution': time_distribution,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
                     elif post_count > total_posts:
-                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        posts_data.extend(cleaned_posts[:total_posts - post_count])
                         post_count = total_posts
                         logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                            'total_posts': post_count,
-                            # 'posts_raw_data': posts_raw_data,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
+                            'duration_distribution': duration_distribution,
+                            'time_distribution': time_distribution,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
@@ -929,15 +883,18 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                        'total_posts': post_count,
-                        # 'posts_raw_data': posts_raw_data,
+                        'llm_processing_cost': llm_processing_cost,
+                        'total_collected_posts': post_count,
+                        'duration_distribution': duration_distribution,
+                        'time_distribution': time_distribution,
+                        #'posts_data': posts_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
                     break
 
             # 使用pandas进行数据处理
-            df = pd.DataFrame(posts_raw_data)
+            df = pd.DataFrame(posts_data)
 
             # 将视频时长从毫秒转换为秒
             df["duration"] = df["duration"] / 1000
@@ -966,18 +923,20 @@ class UserAgent:
                 "duration_distribution": duration_distribution,
                 "time_distribution": time_distribution
             }
-            print(json.dumps(distributions, indent=4))
 
             uniqueId = url.split("@")[-1]
 
-            report_url = await self.generate_analysis_report(uniqueId, 'post_duration_and_time', distributions)
+            report_result = await self.generate_analysis_report(uniqueId, 'post_duration_and_time', distributions)
+            report_url = report_result["report_url"]
+            llm_processing_cost = report_result["cost"]
 
             yield {
                 'user_profile_url': url,
                 'is_complete': True,
-                'message': f'已完成发布作品时长分布和时间分布分析',
+                'message': f'已完成发布作品时长分布和时间分布分析, 请在report_url查看结果',
+                'llm_processing_cost': llm_processing_cost,
                 'report_url': report_url,
-                'total_posts': post_count,
+                'total_collected_posts': post_count,
                 'duration_distribution': duration_distribution,
                 'time_distribution': time_distribution,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -991,7 +950,8 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析发布作品时长分布时发生错误: {str(e)}",
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'duration_distribution': duration_distribution,
                 'time_distribution': time_distribution,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -1002,13 +962,33 @@ class UserAgent:
     async def fetch_post_hashtags(self, url: str, max_hashtags: int) -> AsyncGenerator[Dict[str, Any], None]:
         """
         获取所有的话题，排名使用率最高的话题， 并且生成报告
+
+        Args:
+            url: 用户/达人主页URL
+            max_hashtags: 最大话题数
+
+        Returns:
+            Dict包含:
+            - user_profile_url: 用户/达人主页URL
+            - is_complete: 是否分析完成
+            - message: 分析消息
+            - llm_processing_cost: LLM处理成本
+            - total_collected_posts: 总采集作品数
+            - top_hashtags: 使用率最高的话题
+            - timestamp: 时间戳
+            - processing_time: 处理时间
         """
         logger.info("正在获取话题数据...")
+        if not url or not re.match(r"https://(www\.)?tiktok\.com/@[\w\.-]+", url):
+            raise ValueError("Invalid TikTok user profile URL")
+
         start_time = time.time()
         post_count = 0
-        posts_raw_data = []
+        llm_processing_cost = 0
+        posts_data = []
         hashtags = {}
         total_posts = await self.user_collector.fetch_total_posts_count(url)
+
         try:
             # 采集用户发布的作品数据
             async for posts in self.user_collector.collect_user_posts(url):
@@ -1016,27 +996,29 @@ class UserAgent:
                 if cleaned_posts:
                     post_count += len(cleaned_posts)
                     if post_count <= total_posts:
-                        posts_raw_data.extend(cleaned_posts)
+                        posts_data.extend(cleaned_posts)
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            'total_posts': post_count,
-                            # 'posts_raw_data': posts_raw_data,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
                             'top_hashtags': hashtags,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
                     elif post_count > total_posts:
-                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        posts_data.extend(cleaned_posts[:total_posts - post_count])
                         post_count = total_posts
                         logger.info(f"已采集{post_count}条作品数据, 准备分析发布趋势")
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                            'total_posts': post_count,
-                            # 'posts_raw_data': posts_raw_data,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
+                            #'posts_data': posts_data,
                             'top_hashtags': hashtags,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
@@ -1048,16 +1030,17 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备分析发布趋势...',
-                        'total_posts': post_count,
+                        'llm_processing_cost': llm_processing_cost,
+                        'total_collected_posts': post_count,
                         'top_hashtags': hashtags,
-                        # 'posts_raw_data': posts_raw_data,
+                        #'posts_data': posts_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
                     break
 
             # 使用pandas进行数据处理
-            df = pd.DataFrame(posts_raw_data)
+            df = pd.DataFrame(posts_data)
 
             # 获取所有的话题, 以及每个话题的使用次数
             all_hashtags = df["hashtags"]
@@ -1079,15 +1062,19 @@ class UserAgent:
 
             uniqueID = url.split("@")[-1]
 
-            report_url = await self.generate_analysis_report(uniqueID, 'post_hashtags', hashtags_dict)
+            report_result = await self.generate_analysis_report(uniqueID, 'post_hashtags', hashtags_dict)
+            report_url = report_result["report_url"]
+            llm_processing_cost = report_result["cost"]
 
             yield {
                 'user_profile_url': url,
                 'is_complete': True,
-                'message': f'已完成获取话题数据',
+                'message': f'已完成获取话题数据，请在report_url查看结果',
+                'llm_processing_cost': llm_processing_cost,
                 'report_url': report_url,
-                'total_posts': post_count,
+                'total_collected_posts': post_count,
                 'top_hashtags': hashtags,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -1099,11 +1086,14 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"获取话题数据时发生错误: {str(e)}",
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'top_hashtags': hashtags,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
+            return
 
     async def fetch_post_creator_analysis(self, url: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
@@ -1115,11 +1105,15 @@ class UserAgent:
         Yields:
             Dict: 各个阶段的分析结果，视频信息仅包含aweme_id, desc, download_addr, create_time
         """
-        logger.info("🔍 开始全面分析创作者视频数据...")
+        logger.info("开始全面分析创作者视频数据...")
         start_time = time.time()
         post_count = 0
-        posts_raw_data = []
+        llm_processing_cost = 0
+        posts_data = []
         analysis_results = {}
+
+        if not url or not re.match(r"https://(www\.)?tiktok\.com/@[\w\.-]+", url):
+            raise ValueError("Invalid TikTok user profile URL")
 
         try:
             # 获取用户总发布作品数
@@ -1131,26 +1125,30 @@ class UserAgent:
                 if cleaned_posts:
                     post_count += len(cleaned_posts)
                     if post_count <= total_posts:
-                        posts_raw_data.extend(cleaned_posts)
+                        posts_data.extend(cleaned_posts)
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据..., 进度: {post_count}/{total_posts}...',
-                            'total_posts': post_count,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
                             'analysis_results': analysis_results,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
                     elif post_count > total_posts:
-                        posts_raw_data.extend(cleaned_posts[:total_posts - post_count])
+                        posts_data.extend(cleaned_posts[:total_posts - post_count])
                         post_count = total_posts
                         logger.info(f"已采集{post_count}条作品数据, 准备开始分析...")
                         yield {
                             'user_profile_url': url,
                             'is_complete': False,
                             'message': f'已采集{post_count}条作品数据, 准备开始分析...',
-                            'total_posts': post_count,
+                            'llm_processing_cost': llm_processing_cost,
+                            'total_collected_posts': post_count,
                             'analysis_results': analysis_results,
+                            #'posts_data': posts_data,
                             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                             'processing_time': round(time.time() - start_time, 2)
                         }
@@ -1161,15 +1159,17 @@ class UserAgent:
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{post_count}条作品数据, 准备开始分析...',
-                        'total_posts': post_count,
+                        'llm_processing_cost': llm_processing_cost,
+                        'total_collected_posts': post_count,
                         'analysis_results': analysis_results,
+                        #'posts_data': posts_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
                     break
 
             # 使用pandas进行数据处理
-            df = pd.DataFrame(posts_raw_data)
+            df = pd.DataFrame(posts_data)
 
             # 定义一个函数，用于简化视频数据，只保留指定字段
             def simplify_video_data(videos_list):
@@ -1189,8 +1189,10 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析热门视频...',
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'analysis_results': analysis_results,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -1238,8 +1240,10 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析广告/带货视频...',
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'analysis_results': analysis_results,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -1269,8 +1273,10 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析AI/VR生成视频...',
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'analysis_results': analysis_results,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -1300,8 +1306,10 @@ class UserAgent:
                 'user_profile_url': url,
                 'is_complete': False,
                 'message': '正在分析风险视频...',
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'analysis_results': analysis_results,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -1318,16 +1326,20 @@ class UserAgent:
             }
 
             uniqueID = url.split("@")[-1]
-            report_url = await self.generate_analysis_report(uniqueID, 'post_creator_analysis', analysis_results)
+            report_result = await self.generate_analysis_report(uniqueID, 'post_creator_analysis', analysis_results)
+            report_url = report_result["report_url"]
+            llm_processing_cost = report_result["cost"]
 
             # 完成所有分析，返回最终结果
             yield {
                 'user_profile_url': url,
                 'is_complete': True,
-                'message': '分析完成',
+                'message': '已完成创作者视频分析，请在report_url查看结果',
+                'llm_processing_cost': llm_processing_cost,
                 'report_url': report_url,
-                'total_posts': post_count,
+                'total_collected_posts': post_count,
                 'analysis_results': analysis_results,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
@@ -1339,45 +1351,60 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"分析创作者视频时发生错误: {str(e)}",
-                'total_posts': post_count,
+                'llm_processing_cost': llm_processing_cost,
+                'total_collected_posts': post_count,
                 'analysis_results': analysis_results,
+                #'posts_data': posts_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
+            return
 
     async def fetch_user_fans(self, url: str, max_fans: int = 10000) -> AsyncGenerator[Dict[str, Any], None]:
         """
         获取用户/达人的粉丝画像
         """
         logger.info("正在获取用户粉丝列表...")
+        if not url or not re.match(r"https://(www\.)?tiktok\.com/@[\w\.-]+", url):
+            raise ValueError("Invalid TikTok user profile URL")
+
         start_time = time.time()
         fans_count = 0
         fans_data = []
         total_fans = await self.user_collector.fetch_total_fans_count(url)
+        if max_fans>10000:
+            max_fans = 10000
+
+        if total_fans <= max_fans:
+            max_fans = total_fans
 
         try:
             async for fans_batch in self.user_collector.stream_user_fans(url):
                 cleaned_fans = await self.user_cleaner.clean_user_fans(fans_batch)
-                fans_count += len(cleaned_fans)
-                if fans_count < max_fans:
+                print(fans_count)
+                print(max_fans)
+                remain = max_fans - fans_count
+                if remain >= len(cleaned_fans):
                     fans_data.extend(cleaned_fans)
+                    fans_count += len(cleaned_fans)
                     yield {
                         'user_profile_url': url,
                         'is_complete': False,
                         'message': f'已采集{fans_count}个粉丝， 进度： {fans_count}/{max_fans}',
-                        'total_fans': fans_count,
-                        # 'fans': fans_data,
+                        'total_collected_fans': fans_count,
+                        'fans': fans_data,
                         'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         'processing_time': round(time.time() - start_time, 2)
                     }
-                elif fans_count >= max_fans:
-                    fans_data.extend(cleaned_fans[:max_fans - fans_count])
+                elif remain < len(cleaned_fans):
+                    fans_data.extend(cleaned_fans[:remain])
+                    fans_count += remain
                     break
             yield {
                 'user_profile_url': url,
                 'is_complete': True,
                 'message': f'已完成所有粉丝采集，总计{fans_count}粉丝',
-                'total_fans': fans_count,
+                'total_collected_fans': fans_count,
                 'fans': fans_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
@@ -1389,11 +1416,12 @@ class UserAgent:
                 'is_complete': False,
                 'error': str(e),
                 'message': f"采集粉丝时发生错误: {str(e)}",
-                'total_fans': fans_count,
+                'total_collected_fans': fans_count,
                 'fans': fans_data,
                 'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 'processing_time': round(time.time() - start_time, 2)
             }
+            return
 
 
 async def main():
