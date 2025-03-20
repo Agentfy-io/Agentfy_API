@@ -39,6 +39,81 @@ class Claude:
             "claude-3.5-sonnet": "claude-3-5-sonnet-20240620"
         }
 
+    async def calculate_claude_cost(self, model: str, input_tokens: int, output_tokens: int)->Dict[str, Any]:
+        """
+        异步计算Claude API使用成本
+
+        参数:
+        model (str): 模型名称（如'claude-3-opus', 'claude-3-sonnet', 'claude-3-haiku'等）
+        input_tokens (int): 输入token数量
+        output_tokens (int): 输出token数量
+
+        返回:
+        dict: 包含input_cost, output_cost和total_cost的字典
+        """
+        # Claude模型价格配置（每百万token的美元价格）
+        pricing = {
+            "claude-3-opus": {
+                "input": 15.00 / 1000000,  # $15.00 per 1M tokens
+                "output": 75.00 / 1000000  # $75.00 per 1M tokens
+            },
+            "claude-3-sonnet": {
+                "input": 3.00 / 1000000,  # $3.00 per 1M tokens
+                "output": 15.00 / 1000000  # $15.00 per 1M tokens
+            },
+            "claude-3-haiku": {
+                "input": 0.25 / 1000000,  # $0.25 per 1M tokens
+                "output": 1.25 / 1000000  # $1.25 per 1M tokens
+            },
+            "claude-2": {
+                "input": 8.00 / 1000000,  # $8.00 per 1M tokens
+                "output": 24.00 / 1000000  # $24.00 per 1M tokens
+            },
+            "claude-instant": {
+                "input": 1.63 / 1000000,  # $1.63 per 1M tokens
+                "output": 5.51 / 1000000  # $5.51 per 1M tokens
+            },
+            "claude-3-5-sonnet": {
+                "input": 3.00 / 1000000,  # $3.00 per 1M tokens (预估价格)
+                "output": 15.00 / 1000000  # $15.00 per 1M tokens (预估价格)
+            },
+            "claude-3-7-sonnet": {
+                "input": 5.00 / 1000000,  # $5.00 per 1M tokens (预估价格)
+                "output": 25.00 / 1000000  # $25.00 per 1M tokens (预估价格)
+            }
+        }
+
+        # 标准化模型名称
+        model_key = model.lower()
+        if "claude-3-opus" in model_key:
+            model_key = "claude-3-opus"
+        elif "claude-3-7" in model_key or "claude-3.7" in model_key:
+            model_key = "claude-3-7-sonnet"
+        elif "claude-3-5" in model_key or "claude-3.5" in model_key:
+            model_key = "claude-3-5-sonnet"
+        elif "claude-3-sonnet" in model_key:
+            model_key = "claude-3-sonnet"
+        elif "claude-3-haiku" in model_key:
+            model_key = "claude-3-haiku"
+        elif "claude-2" in model_key:
+            model_key = "claude-2"
+        elif "claude-instant" in model_key:
+            model_key = "claude-instant"
+
+        if model_key not in pricing:
+            raise ValueError(f"未知模型: {model}")
+
+        # 计算成本
+        input_cost = input_tokens * pricing[model_key]["input"]
+        output_cost = output_tokens * pricing[model_key]["output"]
+        total_cost = input_cost + output_cost
+
+        return {
+            "input_cost": input_cost,
+            "output_cost": output_cost,
+            "total_cost": total_cost
+        }
+
     async def chat(self,
                    system_prompt: str,
                    user_prompt: str,
@@ -95,12 +170,7 @@ class Claude:
                 timeout=timeout
             )
 
-            # 记录基本响应信息
-            logger.info(
-                f"Claude响应: 模型={full_model_name}, "
-                f"输出tokens={message.usage.output_tokens}, "
-                f"输入tokens={message.usage.input_tokens}"
-            )
+            cost = await self.calculate_claude_cost(model=full_model_name, input_tokens=message.usage.input_tokens, output_tokens=message.usage.output_tokens)
 
             # 将Anthropic响应转换为标准格式
             content = message.content[0].text if message.content else ""
@@ -121,8 +191,17 @@ class Claude:
                     "prompt_tokens": message.usage.input_tokens,
                     "completion_tokens": message.usage.output_tokens,
                     "total_tokens": message.usage.input_tokens + message.usage.output_tokens
-                }
+                },
+                "cost": cost
             }
+
+            # 记录基本响应信息
+            logger.info(
+                f"Claude响应: 模型={full_model_name}, "
+                f"输出tokens={message.usage.output_tokens}, "
+                f"输入tokens={message.usage.input_tokens}"
+                f"输入成本={cost['input_cost']:.2f}, 输出成本={cost['output_cost']:.2f}, 总成本={cost['total_cost']:.2f}"
+            )
 
             return standardized_response
 
