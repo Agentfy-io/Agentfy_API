@@ -200,7 +200,7 @@ class Claude:
                 f"Claude响应: 模型={full_model_name}, "
                 f"输出tokens={message.usage.output_tokens}, "
                 f"输入tokens={message.usage.input_tokens}"
-                f"输入成本={cost['input_cost']:.2f}, 输出成本={cost['output_cost']:.2f}, 总成本={cost['total_cost']:.2f}"
+                f"输入成本={cost['input_cost']:.6f}, 输出成本={cost['output_cost']:.6f}, 总成本={cost['total_cost']:.6f}"
             )
 
             return standardized_response

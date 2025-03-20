@@ -31,7 +31,7 @@ class ChatGPT:
             # 初始化OpenAI
             self.openai_client = AsyncOpenAI(api_key=self.openai_key, timeout=60)
 
-    async def calculate_openai_cost_async(self, model: str, prompt_tokens: int, completion_tokens: int):
+    async def calculate_openai_cost(self, model: str, prompt_tokens: int, completion_tokens: int)->Dict[str, Any]:
         """
         异步计算OpenAI API使用成本
 
@@ -160,7 +160,7 @@ class ChatGPT:
                 timeout=timeout,
             )
 
-            cost = await self.calculate_openai_cost_async(model, chat_completion.usage.prompt_tokens, chat_completion.usage.completion_tokens)
+            cost = await self.calculate_openai_cost(model, chat_completion.usage.prompt_tokens, chat_completion.usage.completion_tokens)
 
             result = {
                 "model": model,
@@ -174,7 +174,7 @@ class ChatGPT:
             logger.info(
                 f"OpenAI响应: 模型={model}, "
                 f"完成度={chat_completion.usage.completion_tokens}/{chat_completion.usage.total_tokens} "
-                f"输入成本={cost['input_cost']:.2f}, 输出成本={cost['output_cost']:.2f}, 总成本={cost['total_cost']:.2f}"
+                f"输入成本={cost['input_cost']:.6f}, 输出成本={cost['output_cost']:.6f}, 总成本={cost['total_cost']:.6f}"
             )
 
             # 返回生成的结果
