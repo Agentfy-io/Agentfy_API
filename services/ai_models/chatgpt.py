@@ -31,6 +31,82 @@ class ChatGPT:
             # 初始化OpenAI
             self.openai_client = AsyncOpenAI(api_key=self.openai_key, timeout=60)
 
+    async def calculate_openai_cost_async(self, model: str, prompt_tokens: int, completion_tokens: int):
+        """
+        异步计算OpenAI API使用成本
+
+        参数:
+        model (str): 模型名称（如'gpt-4o', 'o1', 'gpt-4o-mini'等）
+        prompt_tokens (int): 输入token数量
+        completion_tokens (int): 输出token数量
+        use_cached_input (bool): 是否使用缓存输入价格（默认False）
+
+        返回:
+        dict: 包含input_cost, output_cost和total_cost的字典
+        """
+        # 模型价格配置（每个token的美元价格）
+        pricing = {
+            "o1": {
+                "input": 15.00 / 1000000,
+                "cached_input": 7.50 / 1000000,
+                "output": 60.00 / 1000000
+            },
+            "o3-mini": {
+                "input": 1.10 / 1000000,
+                "cached_input": 0.55 / 1000000,
+                "output": 4.40 / 1000000
+            },
+            "gpt-4.5": {
+                "input": 75.00 / 1000000,
+                "cached_input": 37.50 / 1000000,
+                "output": 150.00 / 1000000
+            },
+            "gpt-4o": {
+                "input": 2.50 / 1000000,
+                "cached_input": 1.25 / 1000000,
+                "output": 10.00 / 1000000
+            },
+            "gpt-4o-mini": {
+                "input": 0.150 / 1000000,
+                "cached_input": 0.075 / 1000000,
+                "output": 0.600 / 1000000
+            },
+            "gpt-3.5-turbo": {
+                "input": 0.0015 / 1000,
+                "cached_input": 0.0015 / 1000,
+                "output": 0.002 / 1000
+            }
+        }
+
+        # 标准化模型名称 - 这个步骤可以在异步环境中运行
+        model_key = model.lower()
+        if "o1" in model_key:
+            model_key = "o1"
+        elif "o3-mini" in model_key:
+            model_key = "o3-mini"
+        elif "gpt-4.5" in model_key:
+            model_key = "gpt-4.5"
+        elif "gpt-4o-mini" in model_key:
+            model_key = "gpt-4o-mini"
+        elif "gpt-4o" in model_key:
+            model_key = "gpt-4o"
+        elif "gpt-3.5" in model_key:
+            model_key = "gpt-3.5-turbo"
+
+        if model_key not in pricing:
+            raise ValueError(f"未知模型: {model}")
+
+        # 计算成本
+        input_cost = prompt_tokens * pricing[model_key]["input"]
+        output_cost = completion_tokens * pricing[model_key]["output"]
+        total_cost = input_cost + output_cost
+
+        return {
+            "input_cost": input_cost,
+            "output_cost": output_cost,
+            "total_cost": total_cost
+        }
+
     async def chat(self,
                    system_prompt: str,
                    user_prompt: str,
@@ -84,15 +160,25 @@ class ChatGPT:
                 timeout=timeout,
             )
 
+            cost = await self.calculate_openai_cost_async(model, chat_completion.usage.prompt_tokens, chat_completion.usage.completion_tokens)
+
+            result = {
+                "model": model,
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+                "response": chat_completion.model_dump(),
+                "cost": cost
+            }
+
             # 记录基本响应信息，但不包含完整内容（可能很大）
             logger.info(
                 f"OpenAI响应: 模型={model}, "
-                f"完成度={chat_completion.usage.completion_tokens}/{chat_completion.usage.total_tokens}"
+                f"完成度={chat_completion.usage.completion_tokens}/{chat_completion.usage.total_tokens} "
+                f"输入成本={cost['input_cost']:.2f}, 输出成本={cost['output_cost']:.2f}, 总成本={cost['total_cost']:.2f}"
             )
 
             # 返回生成的结果
-            return chat_completion.model_dump()
-
+            return result
         except OpenAIError as e:
             # 记录并封装OpenAI特定错误
             logger.error(f"OpenAI API错误: {str(e)}")
