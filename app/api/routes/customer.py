@@ -210,9 +210,6 @@ async def stream_potential_customers(
             # 更新任务状态
             task_results[task_id]["status"] = "processing"
             task_results[task_id]["message"] = "正在获取视频评论数据...请过10秒+后再查看"
-
-            # 收集所有客户
-            all_customers = []
             start_time = time.time()
 
             # 使用流式API
@@ -225,34 +222,24 @@ async def stream_potential_customers(
                     twitter_filter=twitter_filter,
                     region_filter=region_filter
             ):
+                task_results[task_id]["aweme_id"] = result["aweme_id"]
+                task_results[task_id]["message"] = result['message']
+                task_results[task_id]["customer_count"] = result["customer_count"]
+                task_results[task_id]["potential_customers"] = result["potential_customers"]
+                task_results[task_id]["processing_time_ms"] = result['processing_time_ms']
+                task_results[task_id]["timestamp"] = result["timestamp"]
                 # 检查是否出错
                 if 'error' in result:
                     task_results[task_id]["status"] = "failed"
-                    task_results[task_id]["aweme_id"] = result["aweme_id"]
-                    task_results[task_id]["message"] = f"任务失败/只返回已处理数据: {result['error']}"
-                    task_results[task_id]["potential_customers"] = result["potential_customers"]
-                    task_results[task_id]["customer_count"] = result["customer_count"]
-                    task_results[task_id]["processing_time_ms"] = result.get("processing_time_ms", 0)
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
                     return
 
                 # 处理批量结果并检查是否完成
-                if 'current_batch_customers' in result:
-                    all_customers.extend(result['current_batch_customers'])
+                if not result['is_complete']:
                     task_results[task_id]["status"] = "in_progress"
-                    task_results[task_id]["aweme_id"] = result["aweme_id"]
-                    task_results[task_id]["message"] = f"已获取 {len(all_customers)} 个潜在客户"
-                    task_results[task_id]["potential_customers"] = all_customers
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
                 # 检查任务是否完成
-                if result.get('is_complete', False):
-                    processing_time = round((time.time() - start_time) * 1000, 2)
+                if result['is_complete']:
                     task_results[task_id]["status"] = "completed"
-                    task_results[task_id]["message"] = f"任务完成，共获取 {len(all_customers)} 个潜在客户"
-                    task_results[task_id]["customer_count"] = len(all_customers)
-                    task_results[task_id]["processing_time_ms"] = processing_time
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
                     break
 
         except Exception as e:
@@ -336,9 +323,6 @@ async def stream_keyword_potential_customers(
             task_results[task_id]["status"] = "processing"
             task_results[task_id]["message"] = "正在获取关键词视频列表...请过10秒+后再查看"
 
-            # 收集所有客户
-            all_customers = []
-
             # 使用流式API
             async for result in customer_agent.stream_keyword_potential_customers(
                     keyword=keyword,
@@ -349,37 +333,25 @@ async def stream_keyword_potential_customers(
                     twitter_filter=twitter_filter,
                     region_filter=region_filter
             ):
+                task_results[task_id]["keyword"] = result["keyword"]
+                task_results[task_id]["message"] = result['message']
+                task_results[task_id]["total_collected_customers"] = result['customer_count']
+                task_results[task_id]["potential_customers"] = result['potential_customers']
+                task_results[task_id]["processing_time_ms"] = result['processing_time_ms']
+                task_results[task_id]["timestamp"] = result['timestamp']
                 # 检查是否出错
                 if 'error' in result:
                     task_results[task_id]["status"] = "failed"
-                    task_results[task_id]["keyword"] = result["keyword"]
-                    task_results[task_id]["message"] = f"任务失败/只返回已处理数据: {result['error']}"
-                    task_results[task_id]["total_customers"] = result['total_customers']
-                    task_results[task_id]["potential_customers"] = result['potential_customers']
-                    task_results[task_id]["processing_time_ms"] = result.get("processing_time_ms", 0)
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
                     return
 
                 # 处理最终结果
                 if result['is_complete']:
                     task_results[task_id]["status"] = "completed"
-                    task_results[task_id]["keyword"] = result["keyword"]
-                    task_results[task_id]["message"] = f"任务完成，共获取 {len(all_customers)} 个潜在客户"
-                    task_results[task_id]["total_customers"] = len(all_customers)
-                    task_results[task_id]["processing_time_ms"] = result.get("processing_time_ms", 0)
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
                     break
 
                 # 处理批量结果
                 if not result['is_complete']:
-                    # 更新任务状态
-                    all_customers.extend(result['potential_customers'])
                     task_results[task_id]["status"] = "in_progress"
-                    task_results[task_id]["keyword"] = result["keyword"]
-                    task_results[task_id]["message"] = f"已获取 {len(all_customers)} 个潜在客户"
-                    task_results[task_id]["potential_customers"] = all_customers
-                    task_results[task_id]["processing_time_ms"] = result.get("processing_time_ms", 0)
-                    task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
 
         except Exception as e:

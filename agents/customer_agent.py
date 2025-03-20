@@ -697,7 +697,7 @@ class CustomerAgent:
             if not aweme_id or not isinstance(aweme_id, str):
                 raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
-            logger.info(f"🔍 开始流式获取视频 {aweme_id} 的潜在客户")
+            logger.info(f"开始流式获取视频 {aweme_id} 的潜在客户")
 
             # 流式获取评论
             async for comments_batch in self.comment_collector.stream_video_comments(aweme_id):
@@ -765,33 +765,50 @@ class CustomerAgent:
                             (merged_df['engagement_score'] <= max_score)
                             ]
 
+                        filtered_list = filtered_df.to_dict('records')
+
                         # 检查是否超过客户限制并截断
                         remaining = customer_count - self.total_customers
-                        if len(filtered_df) > remaining:
-                            filtered_df = filtered_df.head(remaining)
-                            is_complete = True
+                        if len(filtered_list) >= remaining:
+                            filtered_list = filtered_list[:remaining]
+                            potential_customers.extend(filtered_list)
                             self.total_customers = customer_count
                             self.comment_collector.status = False
                             self.comment_cleaner.status = False
                             logger.info(f"已达到最大客户数量 {customer_count}，停止处理")
+                            yield {
+                                'aweme_id': aweme_id,
+                                'is_complete': True,
+                                'message': f"已达到最大客户数量 {customer_count}，停止处理",
+                                'current_batch_customers': filtered_list,
+                                'potential_customers': potential_customers,
+                                'customer_count': self.total_customers,
+                                'timestamp': datetime.now().isoformat(),
+                                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                            }
+                            break
                         else:
-                            is_complete = False
                             self.total_customers += len(filtered_df)
-
-                        # 转换为列表并记录
-                        filtered_list = filtered_df.to_dict('records')
-                        potential_customers.extend(filtered_list)
-                        logger.info(f"已处理评论 {len(merged_df)} 条，潜在客户 {len(filtered_df)} 个")
-
-                        # 返回结果
-                        yield {
-                            'aweme_id': aweme_id,
-                            'is_complete': is_complete,
-                            'current_batch_customers': filtered_list,
-                            'potential_customers': potential_customers,
-                            'customer_count': len(filtered_list),
-                            'timestamp': datetime.now().isoformat()
-                        }
+                            potential_customers.extend(filtered_list)
+                            yield {
+                                'aweme_id': aweme_id,
+                                'is_complete': False,
+                                'message': f"已获取潜在客户 {self.total_customers} 个, 继续处理...",
+                                'current_batch_customers': filtered_list,
+                                'potential_customers': potential_customers,
+                                'customer_count': self.total_customers,
+                                'timestamp': datetime.now().isoformat(),
+                                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                            }
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"已完成处理所有评论，总共找到 {len(potential_customers)} 个潜在客户",
+                'potential_customers': potential_customers,
+                'customer_count': self.total_customers,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
         except (ValidationError, ExternalAPIError) as e:
             # 直接向上传递这些已处理的错误
@@ -802,6 +819,7 @@ class CustomerAgent:
             yield {
                 'aweme_id': aweme_id,
                 'error': str(e),
+                'message': f"处理潜在客户时发生错误: {str(e)}",
                 'potential_customers': potential_customers,  # 返回已处理的客户
                 'customer_count': len(potential_customers),
                 'timestamp': datetime.now().isoformat(),
@@ -844,7 +862,7 @@ class CustomerAgent:
             RuntimeError: 当分析过程中出现错误时
         """
         start_time = time.time()
-        self.total_customers = 0
+        total_customers = 0
         all_potential_customers = []
         processed_videos = 0
 
@@ -860,6 +878,16 @@ class CustomerAgent:
             video_cleaner = VideoCleaner()
             raw_videos = await video_collector.collect_videos_by_keyword(keyword)
             cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
+
+            yield {
+                'keyword': keyword,
+                'is_complete': False,
+                'message': f"已找到 {len(cleaned_videos.get('videos', []))} 个与关键词 '{keyword}' 相关的视频",
+                'customer_count': 0,
+                'potential_customers': [],
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             # 提取视频ID列表
             videos_df = pd.DataFrame(cleaned_videos.get('videos', []))
@@ -879,7 +907,7 @@ class CustomerAgent:
             logger.info(f"找到与关键词 '{keyword}' 相关的 {len(aweme_ids)} 个视频")
 
             for aweme_id in aweme_ids:
-                if len(all_potential_customers) >= customer_count:
+                if self.total_customers >= customer_count:
                     logger.info(f"已达到目标客户数量 {customer_count}，停止处理")
                     break
                 async for result in self.stream_potential_customers(
@@ -893,43 +921,59 @@ class CustomerAgent:
                 ):
                     processed_videos += 1
                     users_list = []
-                    if result.get('error'):
-                        users_list = result['potential_customers']
-                    else:
+                    if result.get('current_batch_customers'):
                         users_list = result['current_batch_customers']
 
-                    all_potential_customers.extend(users_list)
-
-                    yield {
-                        'keyword': keyword,
-                        'is_complete': False,
-                        'aweme_id': result.get('aweme_id', ''),
-                        'potential_customers': users_list,
-                        'customer_count': len(users_list),
-                        'timestamp': datetime.now().isoformat()
-                    }
-
+                    remaining = customer_count - total_customers
                     # 检查是否达到目标客户数量
-                    if len(all_potential_customers) >= customer_count:
+                    if len(users_list) >= remaining:
+                        users_list = users_list[:remaining]
+                        all_potential_customers.extend(users_list)
+                        total_customers = customer_count
                         logger.info(f"已达到目标客户数量 {customer_count}，停止处理")
+                        yield {
+                            'keyword': keyword,
+                            'is_complete': True,
+                            'message': f"已达到目标客户数量 {customer_count}，停止处理",
+                            'aweme_id': result.get('aweme_id', ''),
+                            'customer_count': total_customers,
+                            'potential_customers': all_potential_customers,
+                            'timestamp': datetime.now().isoformat(),
+                            'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                        }
                         break
+                    else:
+                        total_customers += len(users_list)
+                        all_potential_customers.extend(users_list)
+                        yield {
+                            'keyword': keyword,
+                            'is_complete': False,
+                            'message': f"已获取视频ID {aweme_id} 潜在客户 {total_customers} 个, 继续处理...",
+                            'customer_count': total_customers,
+                            'potential_customers': users_list,
+                            'timestamp': datetime.now().isoformat(),
+                            'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                        }
             yield {
                 'keyword': keyword,
                 'is_complete': True,
+                'message': f"已完成处理所有视频，总共找到 {len(all_potential_customers)} 个潜在客户",
+                'customer_count': total_customers,
                 'potential_customers': all_potential_customers,
-                'total_customers': len(all_potential_customers),
-                'timestamp': datetime.now().isoformat()
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
         except Exception as e:
             logger.error(f"流式获取关键词相关潜在客户时发生未预期错误: {str(e)}")
             yield {
                 'keyword': keyword,
                 'error': str(e),
+                'message': f"处理关键词相关潜在客户时发生错误: {str(e)}",
                 'potential_customers': all_potential_customers,
-                'total_customers': len(all_potential_customers),
+                'customer_count': total_customers,
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2),
-                'is_complete': True
+                'is_complete': False
             }
 
     """---------------------------------------------获取购买意愿报告-----------------------------------------"""
