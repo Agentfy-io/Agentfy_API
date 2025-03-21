@@ -62,7 +62,6 @@ class AudioGeneratorAgent:
 
         # 加载系统和用户提示
         self._load_system_prompts()
-        self._load_user_prompts()
 
     def _load_system_prompts(self) -> None:
         """加载系统提示用于不同的评论分析类型"""
@@ -107,10 +106,6 @@ class AudioGeneratorAgent:
             """
         }
 
-    def _load_user_prompts(self) -> None:
-        """加载用户提示用于不同语音生成类型"""
-        pass
-
 
     async def text_to_script(self, prompt: str, scenarioType: str, language:str ) -> dict[str, Any]:
         """
@@ -139,18 +134,19 @@ class AudioGeneratorAgent:
             )
 
             # 解析ChatGPT返回的结果
-            transcript = response["choices"][0]["message"]["content"].strip()
+            transcript = response['response']["choices"][0]["message"]["content"].strip()
 
             logger.info(f"生成语音文本成功，耗时: {time.time() - start_time:.2f}秒")
             return {
-                "transcript": transcript,
+                "llm_processing_cost": response['cost'],
                 "metadata": {
                     "language": "zh-CN",
                     "context": "storytelling",
                     "speed": "medium",
                     'generated_at': datetime.now().isoformat(),
                     'processing_time': time.time() - start_time
-                }
+                },
+                "transcript": transcript,
             }
         except ValidationError:
             # 直接向上传递验证错误
@@ -185,7 +181,7 @@ class AudioGeneratorAgent:
 
             if len(speakers) == 0:
                 logger.error("该语言和性别没有可用的发音人")
-                raise ExternalAPIError("该语言和性别没有可用的发音人")
+                raise ExternalAPIError("该语言和性别没有可用的发音人, 请尝试其他配置")
 
             # 选择第一个发音人
             speaker_id = speakers[0]['id']

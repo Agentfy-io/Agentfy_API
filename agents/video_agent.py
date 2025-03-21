@@ -171,13 +171,6 @@ class VideoAgent:
                 3. Areas for potential improvement
                 4. Content distribution recommendations based on all metrics """,
         }
-        # 定义函数映射
-        self.function_map = {
-            "video_info": self.analyze_video_info,
-            "video_transcript": self.fetch_video_transcript,
-            "video_frames": self.analyze_video_frames,
-            "in_video_text": self.fetch_invideo_text
-        }
 
     async def fetch_video_data(self, aweme_id: str) -> Dict[str, Any]:
         """
@@ -321,7 +314,7 @@ class VideoAgent:
             )
 
             # 解析 AI 返回的结果
-            report = response["choices"][0]["message"]["content"].strip()
+            report = response['response']["choices"][0]["message"]["content"].strip()
             logger.info("✅ 已完成用户/达人基础信息分析")
 
             # 保存Markdown报告
@@ -357,6 +350,7 @@ class VideoAgent:
             return {
                 'aweme_id': aweme_id,
                 'report': file_url,
+                'cost': response['cost'],
                 'timestamp': datetime.now().isoformat(),
                 'processing_time': round(time.time() - start_time, 2)
             }
