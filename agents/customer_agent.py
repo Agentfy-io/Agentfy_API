@@ -56,6 +56,8 @@ class CustomerAgent:
         # 初始化收集器和清洁器
         self.comment_collector = CommentCollector(tikhub_api_key)
         self.comment_cleaner = CommentCleaner()
+        self.video_collector = VideoCollector(self.tikhub_api_key)
+        self.video_cleaner = VideoCleaner()
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
@@ -836,6 +838,7 @@ class CustomerAgent:
         total_customers = 0
         all_potential_customers = []
         processed_videos = 0
+        video_data = []
         llm_processing_cost = {'total_cost': 0.0, 'input_cost': 0.0, 'output_cost': 0.0}
 
         try:
@@ -856,14 +859,15 @@ class CustomerAgent:
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
 
-            # 获取清理后的视频数据
-            video_collector = VideoCollector(self.tikhub_api_key)
-            video_cleaner = VideoCleaner()
-            raw_videos = await video_collector.collect_videos_by_keyword(keyword)
-            cleaned_videos = await video_cleaner.clean_videos_by_keyword(raw_videos)
+            # 流式收集关键词视频
+            async for batch in self.video_collector.stream_videos_by_keyword("tiktok", count=10, concurrency=2):
+                cleaned_video = await self.video_cleaner.clean_videos_by_keyword(batch)
+                video_data.extend(cleaned_video)
 
             # 提取视频ID列表
-            videos_df = pd.DataFrame(cleaned_videos.get('videos', []))
+            videos_df = pd.DataFrame(video_data)
+
+            logger.info(f"找到与关键词 '{keyword}' 相关的 {len(videos_df)} 个视频")
 
             if videos_df.empty:
                 logger.warning(f"未找到与关键词 '{keyword}' 相关的视频")

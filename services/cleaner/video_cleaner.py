@@ -180,7 +180,7 @@ class VideoCleaner:
                 'error': str(e),
             }
 
-    async def clean_videos_by_keyword(self, video_data: Dict[str, Any], min_diggCount: int= 500) -> Dict[str, Any]:
+    async def clean_videos_by_keyword(self, video_list: List, min_diggCount: int= 0) -> List:
         """
         清洗和处理关键词搜索视频列表
 
@@ -194,75 +194,57 @@ class VideoCleaner:
         Raises:
             ValidationError: 当输入数据无效时
         """
-        if not isinstance(video_data, dict):
-            raise ValidationError(detail="视频数据必须是字典格式", field="video_data")
+        if not isinstance(video_list, list):
+            raise ValidationError(detail="视频数据必须是列表格式", field="video_list")
 
-        video_list = video_data.get('videos', [])
+        #video_list = video_data.get('videos', [])
+        # 清洗和处理视频列表
+        cleaned_videos = []
+        failed_count = 0
 
-        try:
-            # 清洗和处理视频列表
-            cleaned_videos = []
-            failed_count = 0
-
-
-            for video in video_list:
-                try:
-                    if video.get('stats', {}).get('diggCount', 0) < min_diggCount:
-                        continue
-                    cleaned_video = {
-                        'aweme_id': video.get('id', ''),
-                        'desc': video.get('desc', ''),
-                        'create_time': video.get('create_time', ''),
-                        'playAddr': video.get('video', {}).get('playAddr', ''),
-                        'duration': video.get('video', {}).get('duration', 0),
-                        'uid': video.get('author', {}).get('id', ''),
-                        'uniqueId': video.get('author', {}).get('uniqueId', ''),
-                        'nickname': video.get('author', {}).get('nickname', ''),
-                        'avatarMedium': video.get('author', {}).get('avatarMedium', ''),
-                        'signature': video.get('author', {}).get('signature', ''),
-                        'secUid': video.get('author', {}).get('secUid', ''),
-                        'privateAccount': video.get('author', {}).get('privateAccount', False),
-                        'mid': video.get('music', {}).get('id', ''),
-                        'musicTitle': video.get('music', {}).get('title', ''),
-                        'musicAuthor': video.get('music', {}).get('authorName', ''),
-                        'album': video.get('music', {}).get('album', ''),
-                        'diggCount': video.get('stats', {}).get('diggCount', 0),
-                        'shareCount': video.get('stats', {}).get('shareCount', 0),
-                        'commentCount': video.get('stats', {}).get('commentCount', 0),
-                        'playCount': video.get('stats', {}).get('playCount', 0),
-                        'collectCount': video.get('stats', {}).get('collectCount', 0),
-                        'author_following_count': video.get('authorStats', {}).get('followingCount', 0),
-                        'author_follower_count': video.get('authorStats', {}).get('followerCount', 0),
-                        'author_heart_count': video.get('authorStats', {}).get('heartCount', 0),
-                        'author_video_count': video.get('authorStats', {}).get('videoCount', 0),
-                        'author_heart': video.get('authorStats', {}).get('heart', 0),
-                        'author_digg_count': video.get('authorStats', {}).get('diggCount', 0),
-                        'isAds': video.get('isAds', False),
-
-                    }
-                    cleaned_videos.append(cleaned_video)
-                except Exception as e:
-                    logger.error(f"清洗关键词视频时出错: {str(e)}")
-                    failed_count += 1
+        for video in video_list:
+            try:
+                # print(video)
+                video = video['aweme_info']
+                if video.get('stats', {}).get('diggCount', 0) < min_diggCount:
                     continue
+                cleaned_video = {
+                    'aweme_id': video.get('id', ''),
+                    'desc': video.get('desc', ''),
+                    'create_time': video.get('create_time', ''),
+                    'playAddr': video.get('video', {}).get('playAddr', ''),
+                    'duration': video.get('video', {}).get('duration', 0),
+                    'uid': video.get('author', {}).get('id', ''),
+                    'uniqueId': video.get('author', {}).get('uniqueId', ''),
+                    'nickname': video.get('author', {}).get('nickname', ''),
+                    'avatarMedium': video.get('author', {}).get('avatarMedium', ''),
+                    'signature': video.get('author', {}).get('signature', ''),
+                    'secUid': video.get('author', {}).get('secUid', ''),
+                    'privateAccount': video.get('author', {}).get('privateAccount', False),
+                    'mid': video.get('music', {}).get('id', ''),
+                    'musicTitle': video.get('music', {}).get('title', ''),
+                    'musicAuthor': video.get('music', {}).get('authorName', ''),
+                    'album': video.get('music', {}).get('album', ''),
+                    'diggCount': video.get('stats', {}).get('diggCount', 0),
+                    'shareCount': video.get('stats', {}).get('shareCount', 0),
+                    'commentCount': video.get('stats', {}).get('commentCount', 0),
+                    'playCount': video.get('stats', {}).get('playCount', 0),
+                    'collectCount': video.get('stats', {}).get('collectCount', 0),
+                    'author_following_count': video.get('authorStats', {}).get('followingCount', 0),
+                    'author_follower_count': video.get('authorStats', {}).get('followerCount', 0),
+                    'author_heart_count': video.get('authorStats', {}).get('heartCount', 0),
+                    'author_video_count': video.get('authorStats', {}).get('videoCount', 0),
+                    'author_heart': video.get('authorStats', {}).get('heart', 0),
+                    'author_digg_count': video.get('authorStats', {}).get('diggCount', 0),
+                    'isAds': video.get('isAds', False),
 
-            logger.info(f"已成功清洗 {len(cleaned_videos)} 个关键词视频，失败 {failed_count} 个")
-            return {
-                'keyword': video_data.get('keyword', ''),
-                'videos': cleaned_videos,
-                'video_count': len(cleaned_videos),
-            }
-
-        except ValidationError:
-            # 直接向上传递验证错误
-            raise
-        except Exception as e:
-            logger.error(f"清洗关键词视频列表时出错: {str(e)}")
-            # 返回已清洗的视频（可能是部分），而不是抛出异常中断整个流程
-            return {
-                'videos': [],
-                'error': str(e),
-            }
+                }
+                cleaned_videos.append(cleaned_video)
+            except Exception as e:
+                failed_count += 1
+                continue
+        logger.info(f"已成功清洗 {len(cleaned_videos)} 个关键词视频，失败 {failed_count} 个")
+        return cleaned_videos
 
     def _clean_text(self, text: str) -> str:
         """清洗文本，去除多余空白"""

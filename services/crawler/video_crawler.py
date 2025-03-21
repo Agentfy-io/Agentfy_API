@@ -3,12 +3,13 @@ import json
 from pathlib import Path
 import aiofiles
 import aiohttp
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, AsyncGenerator
 import os
 from dotenv import load_dotenv
 from app.utils.logger import setup_logger
 from app.config import settings
 from app.core.exceptions import ExternalAPIError, ValidationError, RateLimitError
+from services.cleaner.video_cleaner import VideoCleaner
 
 # 设置日志记录器
 logger = setup_logger(__name__)
@@ -28,6 +29,7 @@ class VideoCollector:
             api_key: TikHub API密钥，如果不提供则使用环境变量中的默认值
             base_url: TikHub API基础URL，如果不提供则使用环境变量中的默认值
         """
+        self.status = True
         self.api_key = api_key
         self.base_url = settings.TIKHUB_BASE_URL
 
@@ -42,7 +44,7 @@ class VideoCollector:
         self.endpoints = {
             'one_video': f"{self.base_url}/api/v1/tiktok/app/v3/fetch_one_video",
             'hashtag': f"{self.base_url}/api/v1/tiktok/app/v3/fetch_hashtag_video_list",
-            'keywords': f"{self.base_url}/api/v1/tiktok/web/fetch_search_video"
+            'keywords': f"{self.base_url}/api/v1/tiktok/app/v3/fetch_video_search_result"
         }
 
         self.MAX_RETRIES = 3
@@ -306,16 +308,18 @@ class VideoCollector:
                 original_error=e
             )
 
-    async def collect_videos_by_keyword(self, keyword: str, count: int = 20) -> Dict[str, Any]:
+    async def stream_videos_by_keyword(self, keyword: str, count: int = 20, concurrency: int = 5) -> AsyncGenerator[
+        List[Dict], None]:
         """
-        收集关键词搜索的视频，每次批量并发请求多个偏移位置
+        流式收集关键词搜索的视频，以批次方式产出视频
 
         Args:
             keyword: 搜索关键词
-            count: 每次请求的视频数量，默认100
+            count: 每次请求的视频数量，默认20
+            batch_size: 每次产出的批次大小，默认10
 
-        Returns:
-            收集到的视频列表
+        Yields:
+            视频的批次列表
 
         Raises:
             ValidationError: 当keyword无效时
@@ -325,68 +329,96 @@ class VideoCollector:
         if not keyword:
             raise ValidationError(detail="搜索关键词不能为空", field="keyword")
 
-        videos = []
-        count_per_request = count
+        if count <= 0 or count > 30:
+            raise ValidationError(detail="视频数量必须在1到30之间", field="count")
+
+        if concurrency <= 0 or concurrency > 10:
+            raise ValidationError(detail="并发请求数必须在1到10之间", field="concurrency")
+
+        current_batch = []
         current_offset = 0
         has_more = True
-        search_id = ''
+        total_collected = 0
 
         try:
             async with aiohttp.ClientSession() as session:
-                while has_more:
-                    result = await self._make_request(
-                        session,
-                        self.endpoints['keywords'],
-                        {
-                            'keyword': keyword,
-                            'count': count_per_request,
-                            'offset': current_offset,
-                            'search_id': search_id
-                        },
-                        f"获取关键词 {keyword} 的视频时出错"
-                    )
+                while self.status and has_more:
+                    task = []
+                    for i in range(concurrency):
+                        task.append(self._make_request(
+                            session,
+                            self.endpoints['keywords'],
+                            {
+                                'keyword': keyword,
+                                'offset': current_offset,
+                                'count': count,
+                                'sort_type': 0,
+                                'publish_time': 0,
+                            },
+                            f"获取关键词 {keyword} 的视频时出错"
+                        ))
 
-                    if not result:
-                        logger.error(f"获取关键词 {keyword} 的视频时出错: 无响应数据")
-                        break
+                    results = await asyncio.gather(*task, return_exceptions=True)
 
-                    result_data = result.get('data', {}).get('item_list', [])
+                    batch_videos = []
 
-                    if result_data:
-                        videos.extend(result_data)
-                        new_videos_count = len(result_data)
+                    for idx, result in enumerate(results):
+                        if isinstance(result, Exception):
+                            if isinstance(result, (ExternalAPIError, RateLimitError)):
+                                raise result
+                            logger.error(f"批次请求发生错误: {str(result)}")
+                            continue
 
-                    # 检查当前请求的has_more状态
-                    has_more = result.get('data', {}).get('has_more', False)
-                    if not has_more:
+                        data = result['data']
+                        awemes = data['data']
+                        has_more = data['has_more']
+
+                        if awemes:
+                            batch_videos.extend(awemes)
+                            total_collected += len(awemes)
+
+                    if batch_videos:
+                        logger.info(
+                            f"流式产出关键词 {keyword} 的一批视频: {len(batch_videos)} 条, "
+                            f"总计已收集: {total_collected}"
+                        )
+                        # save batch as json file
+                        with open(f"videos_{current_offset}.json", "w") as f:
+                            json.dump(batch_videos, f)
+
+                        yield batch_videos
+
+                    if has_more == False:
                         logger.info(f"收集完成，偏移量 {current_offset} 处的请求返回has_more=False")
                         break
 
-                    # 更新下一批次的起始偏移量
-                    current_offset = result.get('data', {}).get('cursor', 0)
-                    search_id = result.get('data', {}).get('log_pb', {}).get('impr_id', '')
+                    current_offset += count * concurrency
 
-                    logger.info(f"已收集 {new_videos_count} 个新视频，总计 {len(videos)} 个视频")
-
-                    # 如果没有新视频，可能已经到达尽头
-                    if new_videos_count == 0:
-                        break
-                    # 速率限制
                     await asyncio.sleep(1)
 
-            return {
-                'keyword': keyword,
-                'videos': videos,
-                'video_count': len(videos)
-            }
         except (ValidationError, ExternalAPIError, RateLimitError):
             # 直接向上传递这些已知错误
             raise
         except Exception as e:
-            logger.error(f"收集关键词视频时发生未预期错误: {str(e)}")
+            logger.error(f"流式收集关键词视频时发生未预期错误: {str(e)}")
             raise ExternalAPIError(
-                detail="收集TikTok关键词视频时出现未预期错误",
+                detail="流式收集TikTok关键词视频时出现未预期错误",
                 service="TikHub",
                 original_error=e
             )
+
+async def main():
+    # 创建视频收集器
+    collector = VideoCollector(api_key=os.getenv("TIKHUB_API_KEY"))
+    cleaner = VideoCleaner()
+
+    # 流式收集关键词视频
+    async for batch in collector.stream_videos_by_keyword("tiktok", count=10, concurrency=2):
+        cleaned_video = await cleaner.clean_videos_by_keyword(batch)
+        print(f"Received batch of {len(cleaned_video)} videos")
+
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
 
