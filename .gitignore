@@ -33,3 +33,4 @@ agents/logs/services_cleaner_video_cleaner.log
 /app/__pycache__
 /agents/reports
 /services/crawler
+/services/crawler
