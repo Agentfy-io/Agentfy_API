@@ -56,7 +56,7 @@ class CustomerAgent:
         # 初始化收集器和清洁器
         self.comment_collector = CommentCollector(tikhub_api_key)
         self.comment_cleaner = CommentCleaner()
-        self.video_collector = VideoCollector(self.tikhub_api_key)
+        self.video_collector = VideoCollector(tikhub_api_key)
         self.video_cleaner = VideoCleaner()
 
         # 保存TikHub API配置
