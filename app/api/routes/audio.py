@@ -115,7 +115,7 @@ async def script_to_audio_endpoint(
         text: str = Form(..., description="待转换的文本"),
         language: str = Form(..., description="目标语言（如：zh-CN、en-US 等）"),
         gender: str = Form(..., description="说话人性别（如：male、female）"),
-        age: str = Form(..., description="说话人年龄段（如：child, young, middle, elderly）"),
+        age: str = Form(..., description="说话人年龄段（如：child, young_adult, mature_adult, teen, old）"),
         speed: int = Form(1, description="语速，越大越快，默认=1"),
         audio_generator: Any = Depends(get_audio_generator),
 ):
