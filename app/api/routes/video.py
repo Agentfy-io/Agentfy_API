@@ -5,9 +5,11 @@
 @auth: Callmeiks
 """
 import json
+import random
+import string
 
-from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body
-from typing import Dict, Any, List, Optional
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body, BackgroundTasks
+from typing import Dict, Any, List, Optional, Callable
 import time
 from datetime import datetime
 from app.api.models.responses import create_response
@@ -28,11 +30,69 @@ logger = setup_logger(__name__)
 # 创建路由器
 router = APIRouter(prefix="/video")
 
+# 用于存储后台任务结果的字典
+task_results = {}
+
 
 # 依赖项：获取VideoAgent实例
 async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
     """使用验证后的TikHub API Key创建VideoAgent实例"""
     return VideoAgent(tikhub_api_key=tikhub_api_key)
+
+
+# 通用任务处理函数
+async def process_video_task(task_id: str, analysis_method: Callable, **kwargs):
+    """
+    处理视频分析任务
+
+    Args:
+        task_id: 任务ID
+        analysis_method: 异步生成器方法
+        **kwargs: 传递给方法的参数
+    """
+    try:
+        # 设置初始状态
+        task_results[task_id]["status"] = "in_progress"
+        task_results[task_id]["message"] = "任务已创建，正在启动..."
+
+        # 使用异步生成器获取进度和结果
+        async for result in analysis_method(**kwargs):
+            # 复制所有字段到任务结果
+            for key, value in result.items():
+                if key != "is_complete":  # 不复制is_complete标志
+                    task_results[task_id][key] = value
+
+            # 根据结果更新任务状态
+            if "error" in result:
+                task_results[task_id]["status"] = "failed"
+                break
+
+            if result.get("is_complete", False):
+                task_results[task_id]["status"] = "completed"
+                break
+            else:
+                task_results[task_id]["status"] = "in_progress"
+
+    except ValidationError as e:
+        logger.error(f"验证错误: {str(e)}")
+        task_results[task_id]["status"] = "failed"
+        task_results[task_id]["message"] = f"验证错误: {str(e)}"
+        task_results[task_id]["error"] = str(e)
+        task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    except ExternalAPIError as e:
+        logger.error(f"外部API错误: {str(e)}")
+        task_results[task_id]["status"] = "failed"
+        task_results[task_id]["message"] = f"外部API错误: {str(e)}"
+        task_results[task_id]["error"] = str(e)
+        task_results[task_id]["timestamp"] = datetime.now().isoformat()
+
+    except Exception as e:
+        logger.error(f"任务处理过程中发生未预期错误: {str(e)}")
+        task_results[task_id]["status"] = "failed"
+        task_results[task_id]["message"] = f"内部服务器错误: {str(e)}"
+        task_results[task_id]["error"] = str(e)
+        task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
 
 @router.post(
@@ -46,49 +106,48 @@ async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
 参数:
   * aweme_id: TikTok视频ID
 
-
 （从此无需手动爬取，秒级呈现视频核心！）
 """,
     response_model_exclude_none=True,
 )
 async def fetch_single_video_data(
         request: Request,
+        background_tasks: BackgroundTasks,
         aweme_id: str = Query(..., description="TikTok视频ID"),
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
     """
     获取指定TikTok视频的数据
-
-    - **aweme_id**: TikTok视频ID
-
-    返回清理后`app`端的视频数据
     """
-    start_time = time.time()
+    # 生成任务ID
+    task_id = f"video_data_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
-    try:
-        logger.info(f"获取视频 {aweme_id} 的信息")
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "created",
+        "message": "任务已创建，等待启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id
+    }
 
-        video_data = video_agent.fetch_video_data(aweme_id)
+    # 添加后台任务
+    background_tasks.add_task(
+        process_video_task,
+        task_id=task_id,
+        analysis_method=video_agent.fetch_video_data,
+        aweme_id=aweme_id
+    )
 
-        processing_time = time.time() - start_time
-
-        return create_response(
-            data=video_data,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"获取视频信息时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "created",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
 
 @router.post(
@@ -108,47 +167,48 @@ async def fetch_single_video_data(
 )
 async def analyze_video_info(
         request: Request,
+        background_tasks: BackgroundTasks,
         aweme_id: str = Query(..., description="TikTok视频ID"),
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
     """
     分析TikTok视频数据
-
-    - **aweme_id**: TikTok视频ID
-
-    返回视频数据分析报告
     """
-    start_time = time.time()
+    # 生成任务ID
+    task_id = f"video_info_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
-    try:
-        logger.info(f"分析视频统计数据")
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "created",
+        "message": "任务已创建，等待启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id,
+        "llm_processing_cost": 0
+    }
 
-        video_report = await video_agent.analyze_video_info(aweme_id)
+    # 添加后台任务
+    background_tasks.add_task(
+        process_video_task,
+        task_id=task_id,
+        analysis_method=video_agent.analyze_video_info,
+        aweme_id=aweme_id
+    )
 
-        processing_time = time.time() - start_time
-
-        return create_response(
-            data=video_report,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"分析视频数据时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "created",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
 
 @router.post(
     "/fetch_video_transcript",
-    summary="【音频转录】快速分析/提取 视频字幕内容",
+    summary="【音频转录】快速分析/提取 视频音频内容",
     description="""
 用途:
   * 获取TikTok视频的音频字幕或语言文本
@@ -156,7 +216,6 @@ async def analyze_video_info(
 
 参数:
   * aweme_id: TikTok视频ID
-  
 
 （精准提炼视频主旨，为视频内容理解与创意编排提供支持！）
 """,
@@ -164,42 +223,42 @@ async def analyze_video_info(
 )
 async def fetch_video_transcript(
         request: Request,
+        background_tasks: BackgroundTasks,
         aweme_id: str = Query(..., description="TikTok视频ID"),
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
     """
     分析TikTok视频字幕
-
-    - **aweme_id**: TikTok视频ID
-
-    返回视频字幕分析报告
     """
-    start_time = time.time()
+    # 生成任务ID
+    task_id = f"transcript_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
-    try:
-        logger.info(f"分析视频字幕")
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "created",
+        "message": "任务已创建，等待启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id
+    }
 
-        video_transcript = await video_agent.fetch_video_transcript(aweme_id)
+    # 添加后台任务
+    background_tasks.add_task(
+        process_video_task,
+        task_id=task_id,
+        analysis_method=video_agent.fetch_video_transcript,
+        aweme_id=aweme_id
+    )
 
-        processing_time = time.time() - start_time
-
-        return create_response(
-            data=video_transcript,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"分析视频字幕时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "created",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
 
 @router.post(
@@ -220,43 +279,45 @@ async def fetch_video_transcript(
 )
 async def analyze_video_frames(
         request: Request,
+        background_tasks: BackgroundTasks,
         aweme_id: str = Query(..., description="TikTok视频ID"),
         time_interval: float = Query(2.0, description="分析帧之间的间隔（秒）"),
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
     """
     分析TikTok视频帧
-
-    - **aweme_id**: TikTok视频ID
-
-    返回视频帧分析报告
     """
-    start_time = time.time()
+    # 生成任务ID
+    task_id = f"video_frames_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
-    try:
-        logger.info(f"分析视频帧")
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "created",
+        "message": "任务已创建，等待启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id,
+        "time_interval": time_interval
+    }
 
-        video_frames = await video_agent.analyze_video_frames(aweme_id, time_interval)
+    # 添加后台任务
+    background_tasks.add_task(
+        process_video_task,
+        task_id=task_id,
+        analysis_method=video_agent.analyze_video_frames,
+        aweme_id=aweme_id,
+        time_interval=time_interval
+    )
 
-        processing_time = time.time() - start_time
-
-        return create_response(
-            data=video_frames,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"分析视频帧时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "created",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
 
 @router.post(
@@ -268,6 +329,7 @@ async def analyze_video_frames(
   * 针对于产品讲解或者信息类标识的视频，提取产品名字，价格等信息
   * 识别多种语言，多种场景类型，可后期用于配音字幕等
   * 返回视频内文字提取报告 （时间戳，帧数，文字内容）
+  * （如视频中没有内置文字，该接口会返回空值或者错误信息！）
 
 参数:
   * aweme_id: TikTok视频ID
@@ -280,43 +342,77 @@ async def analyze_video_frames(
 )
 async def fetch_invideo_text(
         request: Request,
+        background_tasks: BackgroundTasks,
         aweme_id: str = Query(..., description="TikTok视频ID"),
-        time_interval: int = Query(90, description="分析帧之间的间隔（秒）"),
-        confidence_threshold: float = Query(0.6, description="文字识别置信度阈值"),
+        time_interval: int = Query(3, description="分析帧之间的间隔（秒）"),
+        confidence_threshold: float = Query(0.5, description="文字识别置信度阈值"),
         video_agent: VideoAgent = Depends(get_video_agent)
 ):
     """
     提取TikTok视频内文字
-
-    - **aweme_id**: TikTok视频ID
-    - **time_interval**: 分析帧之间的间隔（秒）
-    - **confidence_threshold**: 文字识别置信度阈值
-
-    返回视频内文字提取报告
     """
-    start_time = time.time()
+    # 生成任务ID
+    task_id = f"invideo_text_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
 
-    try:
-        logger.info(f"提取视频内文字")
+    # 初始化任务状态
+    task_results[task_id] = {
+        "status": "created",
+        "message": "任务已创建，等待启动",
+        "timestamp": datetime.now().isoformat(),
+        "aweme_id": aweme_id,
+        "time_interval": time_interval,
+        "confidence_threshold": confidence_threshold
+    }
 
-        invideo_text = await video_agent.fetch_invideo_text(aweme_id, time_interval, confidence_threshold)
+    # 添加后台任务
+    background_tasks.add_task(
+        process_video_task,
+        task_id=task_id,
+        analysis_method=video_agent.fetch_invideo_text,
+        aweme_id=aweme_id,
+        time_interval=time_interval,
+        confidence_threshold=confidence_threshold
+    )
 
-        processing_time = time.time() - start_time
+    # 返回任务信息
+    return create_response(
+        data={
+            "task_id": task_id,
+            "status": "created",
+            "message": "任务已创建，正在启动",
+            "timestamp": datetime.now().isoformat()
+        },
+        success=True
+    )
 
-        return create_response(
-            data=invideo_text,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
 
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+@router.get(
+    "/tasks/{task_id}",
+    summary="【任务查询】获取任务状态与结果",
+    description="""
+用途:
+  * 查询视频分析任务的状态和结果
+  * 适用于长时间运行的视频分析任务
+  * 返回任务状态、进度信息和分析结果
 
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
+参数:
+  * task_id: 任务ID
 
-    except Exception as e:
-        logger.error(f"提取视频内文字时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+（随时掌握任务进度，高效管理视频分析流程！）
+""",
+    response_model_exclude_none=True,
+)
+async def get_task_status(
+        request: Request,
+        task_id: str = Path(..., description="任务ID")
+):
+    """
+    获取任务状态和结果
+    """
+    if task_id not in task_results:
+        raise HTTPException(status_code=404, detail="任务不存在")
+
+    return create_response(
+        data=task_results[task_id],
+        success=True
+    )

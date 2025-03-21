@@ -9,7 +9,7 @@ import json
 import re
 import uuid
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, AsyncGenerator
 import asyncio
 import time
 
@@ -57,6 +57,10 @@ class VideoAgent:
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
         self.tikhub_base_url = settings.TIKHUB_BASE_URL
+
+        # 初始化视频数据收集器和清理器
+        self.video_collector = VideoCollector(tikhub_api_key)
+        self.video_cleaner = VideoCleaner()
 
         # 如果没有提供TikHub API密钥，记录警告
         if not self.tikhub_api_key:
@@ -172,58 +176,6 @@ class VideoAgent:
                 4. Content distribution recommendations based on all metrics """,
         }
 
-    async def fetch_video_data(self, aweme_id: str) -> Dict[str, Any]:
-        """
-        获取指定视频清理后的数据
-
-        Args:
-            aweme_id (str): 视频ID
-
-        Returns:
-            Dict[str, Any]: 视频数据
-        """
-
-        start_time = time.time()
-
-        try:
-            if not aweme_id or not isinstance(aweme_id, str):
-                raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
-
-            logger.info(f"🔍 正在获取视频数据: {aweme_id}...")
-
-            video_crawler = VideoCollector(self.tikhub_api_key)
-            video_data = await video_crawler.collect_single_video(aweme_id)
-
-            if not video_data.get('video'):
-                logger.warning(f"❌ 未找到视频数据: {aweme_id}")
-                return{
-                    'aweme_id': aweme_id,
-                    'video': None,
-                    'timestamp': datetime.now().isoformat()
-                }
-            video_cleaner = VideoCleaner()
-            cleaned_video_data = await video_cleaner.clean_single_video(video_data['video'])
-            cleaned_video_data = cleaned_video_data['video']
-
-            result = {
-                'aweme_id': aweme_id,
-                'video': cleaned_video_data,
-                'timestamp': datetime.now().isoformat(),
-                'processing_time': round(time.time() - start_time, 2)
-            }
-
-            logger.info(f"✅ 已获取视频数据: {aweme_id}")
-            return result
-
-        except (ValidationError, ExternalAPIError) as e:
-            # 直接向上传递这些已处理的错误
-            logger.error(f"获取视频时出错: {str(e)}")
-            raise
-
-        except Exception as e:
-            logger.error(f"获取视频数据时发生未预期错误: {str(e)}")
-            raise InternalServerError(detail=f"获取视频数据时发生未预期错误: {str(e)}")
-
     def convert_markdown_to_html(self, markdown_content: str, title: str = "Analysis Report") -> str:
         """
         将Markdown内容转换为HTML
@@ -275,7 +227,73 @@ class VideoAgent:
 
         return html_document
 
-    async def analyze_video_info(self, aweme_id: str) -> Dict[str, Any]:
+    async def fetch_video_data(self, aweme_id: str) -> AsyncGenerator[Dict[str, Any], None]:
+        """
+        获取指定视频清理后的数据
+
+        Args:
+            aweme_id (str): 视频ID
+
+        Returns:
+            AsyncGenerator[Dict[str, Any], None]: 异步生成器，产生视频数据
+        """
+        start_time = time.time()
+
+        try:
+            if not aweme_id or not isinstance(aweme_id, str):
+                raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
+
+            # 初始状态信息
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"开始获取视频数据: {aweme_id}...",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
+
+            logger.info(f"正在获取视频数据: {aweme_id}...")
+
+            video_data = await self.video_collector.collect_single_video(aweme_id)
+            cleaned_video_data = await self.video_cleaner.clean_single_video(video_data['video'])
+            cleaned_video_data = cleaned_video_data['video']
+
+            # 返回最终结果
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"已获取并筛选出关键视频数据: {aweme_id}",
+                'video': cleaned_video_data,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
+
+            logger.info(f"已获取视频数据: {aweme_id}")
+
+        except (ValidationError, ExternalAPIError) as e:
+            # 直接向上传递这些已处理的错误
+            logger.error(f"获取视频时出错: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"获取视频时出错: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
+
+        except Exception as e:
+            logger.error(f"获取视频数据时发生未预期错误: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"获取视频数据时发生未预期错误: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
+
+    async def analyze_video_info(self, aweme_id: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析视频基础信息
 
@@ -283,30 +301,45 @@ class VideoAgent:
             aweme_id (str): 视频ID
 
         Returns:
-            Dict[str, Any]: 分析结果
+            AsyncGenerator[Dict[str, Any], None]: 异步生成器，产生分析结果
         """
+        if not aweme_id or not isinstance(aweme_id, str):
+            raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
         start_time = time.time()
+        llm_processing_cost = 0
 
         try:
-            if not aweme_id or not isinstance(aweme_id, str):
-                raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
+            # 初始状态信息
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"开始分析视频基础信息: {aweme_id}...",
+                'llm_processing_cost': llm_processing_cost,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             logger.info(f"📊 正在分析视频基础信息: {aweme_id}...")
 
-            video_data = await self.fetch_video_data(aweme_id=aweme_id)
-            data = video_data.get('video', {})
+            # 获取视频数据
+            video_data = await self.video_collector.collect_single_video(aweme_id)
+            cleaned_video_data = await self.video_cleaner.clean_single_video(video_data['video'])
+            cleaned_video_data = cleaned_video_data['video']
 
-            if not data:
-                logger.warning(f"❌ 未找到视频数据: {aweme_id}")
-                return {
-                    'aweme_id': aweme_id,
-                    'video_info': None,
-                    'timestamp': datetime.now().isoformat()
-                }
+            # 调用AI进行分析
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': "正在使用AI分析视频信息...",
+                'llm_processing_cost': llm_processing_cost,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             sys_prompt = self.prompts['video_info']
-            user_prompt = f"Here is the video data for aweme_id: {aweme_id}\n{data}"
+            user_prompt = f"Here is the video data for aweme_id: {aweme_id}\n{cleaned_video_data}"
+
             # 调用 AI 进行分析
             response = await self.chatgpt.chat(
                 system_prompt=sys_prompt,
@@ -315,7 +348,18 @@ class VideoAgent:
 
             # 解析 AI 返回的结果
             report = response['response']["choices"][0]["message"]["content"].strip()
-            logger.info("✅ 已完成用户/达人基础信息分析")
+            llm_processing_cost = response['cost']
+            logger.info("已完成视频基础信息分析")
+
+            # 生成报告时更新状态
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': "AI分析完成，正在生成报告...",
+                'llm_processing_cost': llm_processing_cost,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             # 保存Markdown报告
             report_dir = "reports"
@@ -347,24 +391,43 @@ class VideoAgent:
             logger.info(f"报告已生成: Markdown ({report_md_path}), HTML ({html_path})")
             logger.info(f"报告本地URL: {file_url}")
 
-            return {
+            # 返回最终结果
+            yield {
                 'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': "视频基础信息分析完成",
                 'report': file_url,
-                'cost': response['cost'],
+                'llm_processing_cost': llm_processing_cost,
                 'timestamp': datetime.now().isoformat(),
-                'processing_time': round(time.time() - start_time, 2)
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
 
         except (ValidationError, ExternalAPIError) as e:
             # 直接向上传递这些已处理的错误
-            logger.error(f"❌ 分析视频基础信息时出错: {str(e)}")
-            raise
+            logger.error(f"分析视频基础信息时出错: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"分析视频基础信息时出错: {str(e)}",
+                'error': str(e),
+                'llm_processing_cost': llm_processing_cost,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
         except Exception as e:
-            logger.error(f"❌ 分析视频基础信息时发生未预期错误: {str(e)}")
-            raise InternalServerError(detail=f"分析视频基础信息时发生未预期错误: {str(e)}")
+            logger.error(f"分析视频基础信息时发生未预期错误: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"分析视频基础信息时发生未预期错误: {str(e)}",
+                'error': str(e),
+                'llm_processing_cost': llm_processing_cost,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
-    async def fetch_video_transcript(self, aweme_id: str) -> Dict[str, Any]:
+    async def fetch_video_transcript(self, aweme_id: str) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析视频文本转录内容
 
@@ -372,7 +435,7 @@ class VideoAgent:
             aweme_id (str): 视频ID
 
         Returns:
-            Dict[str, Any]: 分析结果
+            AsyncGenerator[Dict[str, Any], None]: 异步生成器，产生转录结果
         """
         start_time = time.time()
 
@@ -380,28 +443,43 @@ class VideoAgent:
             if not aweme_id or not isinstance(aweme_id, str):
                 raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
-            logger.info(f"🔍 正在分析视频文本转录: {aweme_id}...")
+            # 初始状态信息
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"正在分析视频文本转录: {aweme_id}...",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
-            video_data = await self.fetch_video_data(aweme_id=aweme_id)
-            data = video_data.get('video', {})
+            logger.info(f"正在分析视频文本转录: {aweme_id}...")
 
-            if not data:
-                logger.warning(f"❌ 未找到视频数据: {aweme_id}")
-                return {
-                    'aweme_id': aweme_id,
-                    'transcript': None,
-                    'timestamp': datetime.now().isoformat()
-                }
+            # 获取视频数据
+            video_data = None
+            async for result in self.fetch_video_data(aweme_id=aweme_id):
+                if result['is_complete']:
+                    video_data = result.get('video', {})
+
+                    # 传递进度更新
+                    yield {
+                        'aweme_id': aweme_id,
+                        'is_complete': False,
+                        'message': "已获取视频数据，准备提取文本转录...",
+                        'timestamp': datetime.now().isoformat(),
+                        'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                    }
 
             # 提取视频播放地址
-            play_address = data.get('play_address', '')
-            if not play_address:
-                logger.warning(f"❌ 未找到视频播放地址: {aweme_id}")
-                return {
-                    'aweme_id': aweme_id,
-                    'transcript': None,
-                    'timestamp': datetime.now().isoformat()
-                }
+            play_address = video_data.get('play_address', '')
+
+            # 更新状态为正在提取文本
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': "正在提取视频音频文本...",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             # 调用 AI 进行分析
             whisper = WhisperLemonFox()
@@ -418,25 +496,44 @@ class VideoAgent:
                 timestamp_granularities=None,
                 timeout=60
             )
+
             # 提取文本内容
             text = transcript.get('text', '')
-            return {
+
+            # 返回最终结果
+            yield {
                 'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': "视频文本转录完成",
                 'transcript': text,
                 'timestamp': datetime.now().isoformat(),
-                'processing_time': round(time.time() - start_time, 2)
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
 
         except (ValidationError, ExternalAPIError) as e:
             # 直接向上传递这些已处理的错误
-            logger.error(f"❌ 分析视频文本转录时出错: {str(e)}")
-            raise
+            logger.error(f"分析视频文本转录时出错: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"分析视频文本转录时出错: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
         except Exception as e:
-            logger.error(f"❌ 分析视频文本转录时发生未预期错误: {str(e)}")
-            raise InternalServerError(detail=f"分析视频文本转录时发生未预期错误: {str(e)}")
+            logger.error(f"分析视频文本转录时发生未预期错误: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"分析视频文本转录时发生未预期错误: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
-    async def analyze_video_frames(self, aweme_id: str, time_interval: float) -> Dict[str, Any]:
+    async def analyze_video_frames(self, aweme_id: str, time_interval: float) -> AsyncGenerator[Dict[str, Any], None]:
         """
         分析视频帧内容
 
@@ -445,59 +542,91 @@ class VideoAgent:
             time_interval (float): 分析帧的间隔
 
         Returns:
-            Dict[str, Any]: 分析结果
+            AsyncGenerator[Dict[str, Any], None]: 异步生成器，产生分析结果
         """
-
         start_time = time.time()
 
         try:
             if not aweme_id or not isinstance(aweme_id, str):
                 raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
-            logger.info(f"🔍 正在分析视频帧内容: {aweme_id}...")
+            # 初始状态信息
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"正在分析视频帧内容: {aweme_id}...",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
-            video_data = await self.fetch_video_data(aweme_id=aweme_id)
-            data = video_data.get('video', {})
+            logger.info(f"正在分析视频帧内容: {aweme_id}...")
 
-            if not data:
-                logger.warning(f"❌ 未找到视频数据: {aweme_id}")
-                return {
-                    'aweme_id': aweme_id,
-                    'video_script': None,
-                    'timestamp': datetime.now().isoformat()
-                }
+            # 获取视频数据
+            video_data = None
+            async for result in self.fetch_video_data(aweme_id=aweme_id):
+                if result['is_complete']:
+                    video_data = result.get('video', {})
+
+                    # 传递进度更新
+                    yield {
+                        'aweme_id': aweme_id,
+                        'is_complete': False,
+                        'message': "已获取视频数据，准备分析视频帧...",
+                        'timestamp': datetime.now().isoformat(),
+                        'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                    }
 
             # 提取视频播放地址
-            play_address = data.get('play_address', '')
-            if not play_address:
-                logger.warning(f"❌ 未找到视频播放地址: {aweme_id}")
-                return {
-                    'aweme_id': aweme_id,
-                    'video_script': None,
-                    'timestamp': datetime.now().isoformat()
-                }
+            play_address = video_data.get('play_address', '')
+
+            # 更新状态为正在分析视频帧
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"正在以 {time_interval} 秒间隔分析视频帧...",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             # 调用 AI 进行分析
             opencv = OpenCV()
             video_script = await opencv.analyze_video(play_address, time_interval)
 
-            return {
+            # 返回最终结果
+            yield {
                 'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': "视频帧分析完成",
                 'video_script': video_script,
                 'timestamp': datetime.now().isoformat(),
-                'processing_time': round(time.time() - start_time, 2)
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
 
         except (ValidationError, ExternalAPIError) as e:
             # 直接向上传递这些已处理的错误
-            logger.error(f"❌ 分析视频帧内容时出错: {str(e)}")
-            raise
+            logger.error(f"分析视频帧内容时出错: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"分析视频帧内容时出错: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
         except Exception as e:
-            logger.error(f"❌ 分析视频帧内容时发生未预期错误: {str(e)}")
-            raise InternalServerError(detail=f"分析视频帧内容时发生未预期错误: {str(e)}")
+            logger.error(f"分析视频帧内容时发生未预期错误: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"分析视频帧内容时发生未预期错误: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
-    async def fetch_invideo_text(self, aweme_id: str, time_interval: int = 3, confidence_threshold: float = 0.5) -> Dict[str, Any]:
+    async def fetch_invideo_text(self, aweme_id: str, time_interval: int = 3, confidence_threshold: float = 0.5) -> \
+    AsyncGenerator[Dict[str, Any], None]:
         """
         分析视频中出现的文本内容
 
@@ -507,58 +636,87 @@ class VideoAgent:
             confidence_threshold (float): 文本识别的置信度阈值
 
         Returns:
-            Dict[str, Any]: 分析结果
+            AsyncGenerator[Dict[str, Any], None]: 异步生成器，产生提取结果
         """
-
         start_time = time.time()
 
         try:
             if not aweme_id or not isinstance(aweme_id, str):
                 raise ValidationError(detail="aweme_id必须是有效的字符串", field="aweme_id")
 
-            logger.info(f"🔍 正在分析视频中出现文本内容: {aweme_id}...")
+            # 初始状态信息
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"正在分析视频中出现文本内容: {aweme_id}...",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
-            video_data = await self.fetch_video_data(aweme_id=aweme_id)
-            data = video_data.get('video', {})
+            logger.info(f"正在分析视频中出现文本内容: {aweme_id}...")
 
-            if not data:
-                logger.warning(f"❌ 未找到视频数据: {aweme_id}")
-                return {
-                    'aweme_id': aweme_id,
-                    'texts': None,
-                    'timestamp': datetime.now().isoformat()
-                }
+            # 获取视频数据
+            video_data = None
+            async for result in self.fetch_video_data(aweme_id=aweme_id):
+                if result['is_complete']:
+                    video_data = result.get('video', {})
 
+                    # 传递进度更新
+                    yield {
+                        'aweme_id': aweme_id,
+                        'is_complete': False,
+                        'message': "已获取视频数据，准备提取视频内文本...",
+                        'timestamp': datetime.now().isoformat(),
+                        'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+                    }
             # 提取视频播放地址
-            play_address = data.get('play_address', '')
-            if not play_address:
-                logger.warning(f"❌ 未找到视频播放地址: {aweme_id}")
-                return {
-                    'aweme_id': aweme_id,
-                    'texts': None,
-                    'timestamp': datetime.now().isoformat()
-                }
+            play_address = video_data.get('play_address', '')
+
+            # 更新状态为正在提取文本
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': False,
+                'message': f"正在以 {time_interval} 秒间隔提取视频内文本，置信度阈值：{confidence_threshold}...",
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             # 调用 AI 进行分析
             video_ocr = VideoOCR()
             # 提取视频中的文本内容
             texts = await video_ocr.analyze_video(play_address, time_interval, confidence_threshold)
 
-            return {
+            # 返回最终结果
+            yield {
                 'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': "视频内文本提取完成",
                 'in_video_texts': texts,
                 'timestamp': datetime.now().isoformat(),
-                'processing_time': round(time.time() - start_time, 2)
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
 
         except (ValidationError, ExternalAPIError) as e:
             # 直接向上传递这些已处理的错误
-            logger.error(f"❌ 分析视频文本内容时出错: {str(e)}")
-            raise
+            logger.error(f"分析视频文本内容时出错: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"分析视频文本内容时出错: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
         except Exception as e:
-            logger.error(f"❌ 分析视频文本内容时发生未预期错误: {str(e)}")
-            raise InternalServerError(detail=f"分析视频文本内容时发生未预期错误: {str(e)}")
-
+            logger.error(f"分析视频文本内容时发生未预期错误: {str(e)}")
+            yield {
+                'aweme_id': aweme_id,
+                'is_complete': True,
+                'message': f"分析视频文本内容时发生未预期错误: {str(e)}",
+                'error': str(e),
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
 
