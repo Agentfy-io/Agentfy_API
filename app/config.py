@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     TIKHUB_API_KEY: Optional[str] = Field(None, env="TIKHUB_API_KEY")
     LEMONFOX_API_KEY: Optional[str] = Field(None, env="LEMONFOX_API_KEY")
     LOVO_API_KEY: Optional[str] = Field(None, env="LOVO_API_KEY")
+    ELEVENLABS_API_KEY: Optional[str] = Field(None, env="ELEVENLABS_API_KEY")
 
     # TikHub API 配置
     TIKHUB_BASE_URL: str = Field("https://api.tikhub.io", env="TIKHUB_BASE_URL")
