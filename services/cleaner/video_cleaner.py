@@ -207,9 +207,10 @@ class VideoCleaner:
                 # print(video)
                 video = video['aweme_info']
                 if video.get('stats', {}).get('diggCount', 0) < min_diggCount:
+                    failed_count += 1
                     continue
                 cleaned_video = {
-                    'aweme_id': video.get('id', ''),
+                    'aweme_id': video.get('aweme_id', ''),
                     'desc': video.get('desc', ''),
                     'create_time': video.get('create_time', ''),
                     'playAddr': video.get('video', {}).get('playAddr', ''),

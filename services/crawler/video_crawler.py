@@ -382,9 +382,6 @@ class VideoCollector:
                             f"流式产出关键词 {keyword} 的一批视频: {len(batch_videos)} 条, "
                             f"总计已收集: {total_collected}"
                         )
-                        # save batch as json file
-                        with open(f"videos_{current_offset}.json", "w") as f:
-                            json.dump(batch_videos, f)
 
                         yield batch_videos
 
@@ -393,8 +390,6 @@ class VideoCollector:
                         break
 
                     current_offset += count * concurrency
-
-                    await asyncio.sleep(1)
 
         except (ValidationError, ExternalAPIError, RateLimitError):
             # 直接向上传递这些已知错误

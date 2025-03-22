@@ -719,7 +719,6 @@ class CustomerAgent:
 
                         # 过滤无效评论
                         merged_df = merged_df.drop_duplicates('commenter_uniqueId')
-                        logger.info(f"合并分析结果: {len(merged_df)} 条评论")
 
                         # 计算参与度分数
                         merged_df['engagement_score'] = merged_df.apply(
@@ -738,10 +737,11 @@ class CustomerAgent:
                             ]
 
                         filtered_list = filtered_df.to_dict('records')
+                        logger.info(f"合并分析结果: {len(filtered_list)} 条评论")
 
                         # 检查是否超过客户限制并截断
                         remaining = customer_count - self.total_customers
-                        if len(filtered_list) > remaining:
+                        if len(filtered_list) >= remaining:
                             filtered_list = filtered_list[:remaining]
                             potential_customers.extend(filtered_list)
                             self.total_customers = customer_count
@@ -835,7 +835,7 @@ class CustomerAgent:
             RuntimeError: 当分析过程中出现错误时
         """
         start_time = time.time()
-        total_customers = 0
+        total_collected_customers = 0
         all_potential_customers = []
         processed_videos = 0
         video_data = []
@@ -846,7 +846,7 @@ class CustomerAgent:
             if not keyword or not isinstance(keyword, str):
                 raise ValueError("无效的关键词")
 
-            logger.info(f"🔍 开始流式获取关键词 '{keyword}' 相关视频的潜在客户")
+            logger.info(f"开始流式获取关键词 '{keyword}' 相关视频的潜在客户")
 
             yield {
                 'keyword': keyword,
@@ -860,14 +860,12 @@ class CustomerAgent:
             }
 
             # 流式收集关键词视频
-            async for batch in self.video_collector.stream_videos_by_keyword("tiktok", count=10, concurrency=2):
+            async for batch in self.video_collector.stream_videos_by_keyword("tiktok", count=20, concurrency=4):
                 cleaned_video = await self.video_cleaner.clean_videos_by_keyword(batch)
                 video_data.extend(cleaned_video)
 
             # 提取视频ID列表
             videos_df = pd.DataFrame(video_data)
-
-            logger.info(f"找到与关键词 '{keyword}' 相关的 {len(videos_df)} 个视频")
 
             if videos_df.empty:
                 logger.warning(f"未找到与关键词 '{keyword}' 相关的视频")
@@ -886,6 +884,17 @@ class CustomerAgent:
 
             aweme_ids = videos_df['aweme_id'].tolist()
             logger.info(f"找到与关键词 '{keyword}' 相关的 {len(aweme_ids)} 个视频")
+
+            yield {
+                'keyword': keyword,
+                'message': f"视频数据采集完成，开始分析潜在客户...",
+                'is_complete': False,
+                'llm_processing_cost': llm_processing_cost,
+                'potential_customers': [],
+                'customer_count': 0,
+                'timestamp': datetime.now().isoformat(),
+                'processing_time_ms': round((time.time() - start_time) * 1000, 2)
+            }
 
             for aweme_id in aweme_ids:
                 if self.total_customers >= customer_count:
@@ -907,24 +916,25 @@ class CustomerAgent:
 
                     if 'current_batch_customers' in result:
                         users_list = result['current_batch_customers']
+                        logger.info(len(users_list))
 
-                        remaining = customer_count - total_customers
+                        remaining = customer_count - total_collected_customers
                         # 检查是否达到目标客户数量
                         if len(users_list) >= remaining:
                             users_list = users_list[:remaining]
                             all_potential_customers.extend(users_list)
-                            total_customers = customer_count
+                            total_collected_customers += len(users_list)
                             logger.info(f"已达到目标客户数量 {customer_count}，停止处理")
                             break
                         else:
-                            total_customers += len(users_list)
+                            total_collected_customers += len(users_list)
                             all_potential_customers.extend(users_list)
                             yield {
                                 'keyword': keyword,
                                 'is_complete': False,
-                                'message': f"已获取视频ID {aweme_id} 潜在客户 {total_customers} 个, 继续处理...",
+                                'message': f"已获取视频ID {aweme_id} 潜在客户 {len(users_list)} 个, 继续处理...",
                                 'llm_processing_cost': llm_processing_cost,
-                                'customer_count': total_customers,
+                                'customer_count': total_collected_customers,
                                 'potential_customers': all_potential_customers,
                                 'timestamp': datetime.now().isoformat(),
                                 'processing_time_ms': round((time.time() - start_time) * 1000, 2)
@@ -934,7 +944,7 @@ class CustomerAgent:
                 'is_complete': True,
                 'message': f"已完成处理所有视频，总共找到 {len(all_potential_customers)} 个潜在客户",
                 'llm_processing_cost': llm_processing_cost,
-                'customer_count': total_customers,
+                'customer_count': total_collected_customers,
                 'potential_customers': all_potential_customers,
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2)
@@ -947,7 +957,7 @@ class CustomerAgent:
                 'message': f"处理关键词相关潜在客户时发生错误: {str(e)}",
                 'llm_processing_cost': llm_processing_cost,
                 'potential_customers': all_potential_customers,
-                'customer_count': total_customers,
+                'customer_count': total_collected_customers,
                 'timestamp': datetime.now().isoformat(),
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2),
                 'is_complete': False

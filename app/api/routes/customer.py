@@ -301,7 +301,6 @@ async def stream_keyword_potential_customers(
         "message": "任务已创建，正在启动",
         "timestamp": datetime.now().isoformat(),
         "keyword": keyword,
-        "results": []
     }
 
     # 定义后台任务
