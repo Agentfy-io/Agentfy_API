@@ -4,25 +4,22 @@
 @desc: FastAPI 客户端路由
 @auth: Callmeiks
 """
-import json
 import random
 import string
-
-from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body, BackgroundTasks
-from typing import Dict, Any, List, Optional, Callable
 import time
 from datetime import datetime
+from typing import Callable
+
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, BackgroundTasks
+
 from app.api.models.responses import create_response
 from agents.video_agent import VideoAgent
 from app.core.exceptions import (
     ValidationError,
     ExternalAPIError,
-    InternalServerError,
-    NotFoundError
 )
 from app.utils.logger import setup_logger
 from app.dependencies import verify_tikhub_api_key  # 从dependencies.py导入验证函数
-from app.config import settings
 
 # 设置日志记录器
 logger = setup_logger(__name__)
@@ -38,6 +35,22 @@ task_results = {}
 async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
     """使用验证后的TikHub API Key创建VideoAgent实例"""
     return VideoAgent(tikhub_api_key=tikhub_api_key)
+
+
+# 生成唯一任务ID的辅助函数
+def generate_task_id(prefix: str) -> str:
+    """
+    生成唯一的任务ID
+
+    Args:
+        prefix: 任务ID前缀
+
+    Returns:
+        生成的任务ID
+    """
+    random_str = ''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))
+    timestamp = int(time.time())
+    return f"{prefix}_{random_str}_{timestamp}"
 
 
 # 通用任务处理函数
@@ -78,21 +91,18 @@ async def process_video_task(task_id: str, analysis_method: Callable, **kwargs):
         task_results[task_id]["status"] = "failed"
         task_results[task_id]["message"] = f"验证错误: {str(e)}"
         task_results[task_id]["error"] = str(e)
-        task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
     except ExternalAPIError as e:
         logger.error(f"外部API错误: {str(e)}")
         task_results[task_id]["status"] = "failed"
         task_results[task_id]["message"] = f"外部API错误: {str(e)}"
         task_results[task_id]["error"] = str(e)
-        task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
     except Exception as e:
         logger.error(f"任务处理过程中发生未预期错误: {str(e)}")
         task_results[task_id]["status"] = "failed"
         task_results[task_id]["message"] = f"内部服务器错误: {str(e)}"
         task_results[task_id]["error"] = str(e)
-        task_results[task_id]["timestamp"] = datetime.now().isoformat()
 
 
 @router.post(
@@ -120,13 +130,12 @@ async def fetch_single_video_data(
     获取指定TikTok视频的数据
     """
     # 生成任务ID
-    task_id = f"video_data_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+    task_id = generate_task_id("video_data")
 
     # 初始化任务状态
     task_results[task_id] = {
         "status": "created",
         "message": "任务已创建，等待启动",
-        "timestamp": datetime.now().isoformat(),
         "aweme_id": aweme_id
     }
 
@@ -144,7 +153,6 @@ async def fetch_single_video_data(
             "task_id": task_id,
             "status": "created",
             "message": "任务已创建，正在启动",
-            "timestamp": datetime.now().isoformat()
         },
         success=True
     )
@@ -175,13 +183,12 @@ async def analyze_video_info(
     分析TikTok视频数据
     """
     # 生成任务ID
-    task_id = f"video_info_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+    task_id = generate_task_id("video_info")
 
     # 初始化任务状态
     task_results[task_id] = {
         "status": "created",
         "message": "任务已创建，等待启动",
-        "timestamp": datetime.now().isoformat(),
         "aweme_id": aweme_id,
         "llm_processing_cost": 0
     }
@@ -200,7 +207,6 @@ async def analyze_video_info(
             "task_id": task_id,
             "status": "created",
             "message": "任务已创建，正在启动",
-            "timestamp": datetime.now().isoformat()
         },
         success=True
     )
@@ -231,13 +237,12 @@ async def fetch_video_transcript(
     分析TikTok视频字幕
     """
     # 生成任务ID
-    task_id = f"transcript_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+    task_id = generate_task_id("transcript")
 
     # 初始化任务状态
     task_results[task_id] = {
         "status": "created",
         "message": "任务已创建，等待启动",
-        "timestamp": datetime.now().isoformat(),
         "aweme_id": aweme_id
     }
 
@@ -255,7 +260,6 @@ async def fetch_video_transcript(
             "task_id": task_id,
             "status": "created",
             "message": "任务已创建，正在启动",
-            "timestamp": datetime.now().isoformat()
         },
         success=True
     )
@@ -288,13 +292,12 @@ async def analyze_video_frames(
     分析TikTok视频帧
     """
     # 生成任务ID
-    task_id = f"video_frames_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+    task_id = generate_task_id("video_frames")
 
     # 初始化任务状态
     task_results[task_id] = {
         "status": "created",
         "message": "任务已创建，等待启动",
-        "timestamp": datetime.now().isoformat(),
         "aweme_id": aweme_id,
         "time_interval": time_interval
     }
@@ -314,7 +317,6 @@ async def analyze_video_frames(
             "task_id": task_id,
             "status": "created",
             "message": "任务已创建，正在启动",
-            "timestamp": datetime.now().isoformat()
         },
         success=True
     )
@@ -352,13 +354,12 @@ async def fetch_invideo_text(
     提取TikTok视频内文字
     """
     # 生成任务ID
-    task_id = f"invideo_text_{''.join(random.choice(string.ascii_letters + string.digits) for _ in range(8))}_{int(time.time())}"
+    task_id = generate_task_id("invideo_text")
 
     # 初始化任务状态
     task_results[task_id] = {
         "status": "created",
         "message": "任务已创建，等待启动",
-        "timestamp": datetime.now().isoformat(),
         "aweme_id": aweme_id,
         "time_interval": time_interval,
         "confidence_threshold": confidence_threshold
@@ -380,7 +381,6 @@ async def fetch_invideo_text(
             "task_id": task_id,
             "status": "created",
             "message": "任务已创建，正在启动",
-            "timestamp": datetime.now().isoformat()
         },
         success=True
     )

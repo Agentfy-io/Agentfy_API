@@ -1,11 +1,10 @@
 import asyncio
-import json
-from pathlib import Path
-import aiofiles
-import aiohttp
-from typing import List, Dict, Any, Optional, Union, AsyncGenerator
+from typing import List, Dict, Any, Optional, AsyncGenerator
 import os
+
+import aiohttp
 from dotenv import load_dotenv
+
 from app.utils.logger import setup_logger
 from app.config import settings
 from app.core.exceptions import ExternalAPIError, ValidationError, RateLimitError
@@ -27,11 +26,11 @@ class VideoCollector:
 
         Args:
             api_key: TikHub API密钥，如果不提供则使用环境变量中的默认值
-            base_url: TikHub API基础URL，如果不提供则使用环境变量中的默认值
         """
         self.status = True
         self.api_key = api_key
         self.base_url = settings.TIKHUB_BASE_URL
+        self.MAX_RETRIES = 3
 
         if not self.api_key:
             logger.warning("未提供TikHub API密钥，某些功能可能不可用")
@@ -47,14 +46,12 @@ class VideoCollector:
             'keywords': f"{self.base_url}/api/v1/tiktok/app/v3/fetch_video_search_result"
         }
 
-        self.MAX_RETRIES = 3
-
     async def _make_request(
-            self,
-            session: aiohttp.ClientSession,
-            url: str,
-            params: Dict[str, Any],
-            error_message: str
+        self,
+        session: aiohttp.ClientSession,
+        url: str,
+        params: Dict[str, Any],
+        error_message: str
     ) -> Optional[Dict]:
         """
         通用请求处理方法
@@ -204,7 +201,11 @@ class VideoCollector:
                 original_error=e
             )
 
-    async def collect_videos_by_hashtag(self, chi_id: str, batch_size: int = 5) -> Dict[str, Any]:
+    async def collect_videos_by_hashtag(
+        self,
+        chi_id: str,
+        batch_size: int = 5
+    ) -> Dict[str, Any]:
         """
         收集话题标签的视频，每次批量并发请求多个游标位置
 
@@ -276,7 +277,11 @@ class VideoCollector:
                             # 只要有一个请求返回has_more为False，立即停止整个收集过程
                             cursor = current_cursor + (i * count_per_request)
                             logger.info(f"收集完成，游标 {cursor} 处的请求返回has_more=False")
-                            return videos
+                            return {
+                                'chi_id': chi_id,
+                                'videos': videos,
+                                'video_count': len(videos)
+                            }
 
                     logger.info(f"已收集 {new_videos_count} 个新视频，总计 {len(videos)} 个视频")
 
@@ -308,15 +313,19 @@ class VideoCollector:
                 original_error=e
             )
 
-    async def stream_videos_by_keyword(self, keyword: str, count: int = 20, concurrency: int = 5) -> AsyncGenerator[
-        List[Dict], None]:
+    async def stream_videos_by_keyword(
+        self,
+        keyword: str,
+        count: int = 20,
+        concurrency: int = 5
+    ) -> AsyncGenerator[List[Dict], None]:
         """
         流式收集关键词搜索的视频，以批次方式产出视频
 
         Args:
             keyword: 搜索关键词
             count: 每次请求的视频数量，默认20
-            batch_size: 每次产出的批次大小，默认10
+            concurrency: 并发请求数，默认5
 
         Yields:
             视频的批次列表
@@ -335,7 +344,6 @@ class VideoCollector:
         if concurrency <= 0 or concurrency > 10:
             raise ValidationError(detail="并发请求数必须在1到10之间", field="concurrency")
 
-        current_batch = []
         current_offset = 0
         has_more = True
         total_collected = 0
@@ -343,9 +351,9 @@ class VideoCollector:
         try:
             async with aiohttp.ClientSession() as session:
                 while self.status and has_more:
-                    task = []
+                    tasks = []
                     for i in range(concurrency):
-                        task.append(self._make_request(
+                        tasks.append(self._make_request(
                             session,
                             self.endpoints['keywords'],
                             {
@@ -358,7 +366,7 @@ class VideoCollector:
                             f"获取关键词 {keyword} 的视频时出错"
                         ))
 
-                    results = await asyncio.gather(*task, return_exceptions=True)
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
 
                     batch_videos = []
 
@@ -385,7 +393,7 @@ class VideoCollector:
 
                         yield batch_videos
 
-                    if has_more == False:
+                    if not has_more:
                         logger.info(f"收集完成，偏移量 {current_offset} 处的请求返回has_more=False")
                         break
 
@@ -402,7 +410,9 @@ class VideoCollector:
                 original_error=e
             )
 
+
 async def main():
+    """测试视频收集器功能的主函数"""
     # 创建视频收集器
     collector = VideoCollector(api_key=os.getenv("TIKHUB_API_KEY"))
     cleaner = VideoCleaner()
@@ -413,7 +423,5 @@ async def main():
         print(f"Received batch of {len(cleaned_video)} videos")
 
 
-
 if __name__ == "__main__":
     asyncio.run(main())
-
