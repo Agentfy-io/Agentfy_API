@@ -7,21 +7,22 @@
 
 import json
 import re
+import os
+import time
+import asyncio
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Union
-import asyncio
-import time
 
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
-import os
 
 from app.utils.logger import setup_logger
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from services.ai_models.whisper import WhisperLemonFox
 from services.ai_models.genny import Genny
+from services.ai_models.elevenLabs import ElevenLabsClient
 from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 from services.auth.auth_service import user_sessions
@@ -44,13 +45,13 @@ class AudioGeneratorAgent:
 
         Args:
             tikhub_api_key: TikHub API密钥
-            tikhub_base_url: TikHub API基础URL
         """
         # 初始化AI模型客户端
         self.chatgpt = ChatGPT()
         self.claude = Claude()
         self.whisper = WhisperLemonFox()
         self.genny = Genny()
+        self.elevenLabs = ElevenLabsClient()
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
@@ -67,47 +68,40 @@ class AudioGeneratorAgent:
         """加载系统提示用于不同的评论分析类型"""
         self.system_prompts = {
             "text_to_script": """You are a professional short-video script creation assistant. When given a brief request from the user (e.g., "Create a short story about Nezha"), you should automatically infer and decide on the following five elements:           
-            1. language:
-               - The language to be used in the script. 
-               - Must be returned using an ISO language-region format (e.g., "zh-CN", "en-US"). 
-               - If the user does not specify a language, you should automatically match the user's input or default to an appropriate language.           
-            2. context:
-               - The general context or theme (Mythology & Folklore, Historical Events & Biographies, Science & Technology, Educational/Academic, Art & Literature, Culture & Heritage, Travel & Exploration, Food & Culinary, Product Promotion/Commercial, Lifestyle, Entertainment & Pop Culture, Inspirational & Motivational, Health & Wellness, Personal Development & Self-Help, Philosophy & Ethics, Finance & Economics, Business & Entrepreneurship, Marketing & Advertising, Environmental & Sustainability, Social Issues & Awareness, Comedy & Satire, Parenting & Family, Relationships & Dating, Case Studies/Testimonials, Professional Skills & Career, Language Learning, Hobbies & Crafts, Gaming, News & Current Events, Sports & Fitness, Music & Performing Arts, Film & TV)                  
-            3. scenarioType:
-               - The scenario type. (Storytelling,Product Showcase, Educational/Explainer,Tutorial/How-To, Promotional/Marketing, Testimonial/Review, Comedy/Entertainment, Lifestyle/Vlog, Inspirational/Motivational, Documentary-Style, News/Current Events, Case Study, Interview or Q&A, Health & Wellness, Cooking/Recipe,Fashion/Beauty, Travel/Adventure, Tech Tips/Hacks, Challenge or Game.)              
-            4. tone:
-               - The overall style or mood (friendly, serious, playful, comedic, dramatic, authoritative, casual, formal, lively, motivational, urgent, enthusiastic, calm, warm, uplifting, confident, nostalgic, encouraging, soothing, empathetic, matter-of-fact, neutral, romantic, humorous). 
-               - If the user does not specify, default to a neutral/friendly tone.           
-            5. duration:
-               - The target reading duration for the script. If the user does not specify a duration, please aim for approximately 30 seconds of spoken content.          
-            **Your task**:
-            - When the user provides only a brief request, infer as many details as possible for these eight elements. 
-            - Create a short script suitable for platforms like TikTok or any short-video format, including an engaging opening, core content, and a concise conclusion or call-to-action. 
-            - Use textual cues to indicate pacing or tempo if needed (e.g., ellipses for dramatic pauses).
-            - Ensure the script is engaging, informative, and suitable for the specified context and language.
-            - you may pair up multiple tones with different scenarios, but make sure the tone is appropriate for the context.
-            - Return **only** the following JSON structure (with no extra text or formatting):            
+                    1. language:
+                       - The language to be used in the script. 
+                       - Must be returned using an ISO language-region format (e.g., "zh-CN", "en-US"). 
+                       - If the user does not specify a language, you should automatically match the user's input or default to an appropriate language.           
+                    2. context:
+                       - The general context or theme (Mythology & Folklore, Historical Events & Biographies, Science & Technology, Educational/Academic, Art & Literature, Culture & Heritage, Travel & Exploration, Food & Culinary, Product Promotion/Commercial, Lifestyle, Entertainment & Pop Culture, Inspirational & Motivational, Health & Wellness, Personal Development & Self-Help, Philosophy & Ethics, Finance & Economics, Business & Entrepreneurship, Marketing & Advertising, Environmental & Sustainability, Social Issues & Awareness, Comedy & Satire, Parenting & Family, Relationships & Dating, Case Studies/Testimonials, Professional Skills & Career, Language Learning, Hobbies & Crafts, Gaming, News & Current Events, Sports & Fitness, Music & Performing Arts, Film & TV)                  
+                    3. scenarioType:
+                       - The scenario type. (Storytelling,Product Showcase, Educational/Explainer,Tutorial/How-To, Promotional/Marketing, Testimonial/Review, Comedy/Entertainment, Lifestyle/Vlog, Inspirational/Motivational, Documentary-Style, News/Current Events, Case Study, Interview or Q&A, Health & Wellness, Cooking/Recipe,Fashion/Beauty, Travel/Adventure, Tech Tips/Hacks, Challenge or Game.)              
+                    4. tone:
+                       - The overall style or mood (friendly, serious, playful, comedic, dramatic, authoritative, casual, formal, lively, motivational, urgent, enthusiastic, calm, warm, uplifting, confident, nostalgic, encouraging, soothing, empathetic, matter-of-fact, neutral, romantic, humorous). 
+                       - If the user does not specify, default to a neutral/friendly tone.           
+                    5. duration:
+                       - The target reading duration for the script. If the user does not specify a duration, please aim for approximately 30 seconds of spoken content.          
+                    **Your task**:
+                    - When the user provides only a brief request, infer as many details as possible for these eight elements. 
+                    - Create a short script suitable for platforms like TikTok or any short-video format, including an engaging opening, core content, and a concise conclusion or call-to-action. 
+                    - Use textual cues to indicate pacing or tempo if needed (e.g., ellipses for dramatic pauses).
+                    - Ensure the script is engaging, informative, and suitable for the specified context and language.
+                    - you may pair up multiple tones with different scenarios, but make sure the tone is appropriate for the context.
+                    - Return **only** the script in text (with no extra text or formatting):            
 
-            {
-                "text": "Place the final short-video (or audio) script here",
-                "metadata": {
-                    "language": "ISO language-region code (e.g. zh-CN, en-US)",
-                    "context": "e.g. mythological story",
-                    "scenarioType": "e.g. storytelling",
-                    "tone": "e.g. narrative and friendly",
-                    "duration": "e.g. 30 seconds"
-                }
-            }                        
-            **Important**:
-            - Make sure the returned field names and structure match exactly.
-            - If any user requirement is unclear or missing, assume reasonable defaults. 
-            - Always ensure the final script matches the language and context inferred or specified by the user.           
-            - Remember that this transcript will be converted to speech, so it should sound natural when read aloud. Use appropriate pacing, transitions, and conversational elements to ensure a smooth listening experience in the specified language.
-            """
+                    **Important**:
+                    - If any user requirement is unclear or missing, assume reasonable defaults. 
+                    - Always ensure the final script matches the language and context inferred or specified by the user.           
+                    - Remember that this transcript will be converted to speech, so it should sound natural when read aloud. Use appropriate pacing, transitions, and conversational elements to ensure a smooth listening experience in the specified language.
+                    """
         }
 
-
-    async def text_to_script(self, prompt: str, scenarioType: str, language:str ) -> dict[str, Any]:
+    async def text_to_script(
+            self,
+            prompt: str,
+            scenarioType: str,
+            language: str
+    ) -> Dict[str, Any]:
         """
         根据用户输入关键词生成语音文本
 
@@ -117,17 +111,25 @@ class AudioGeneratorAgent:
             language: 语言
 
         Returns:
-            转换后的文本
+            转换后的文本及元数据
         """
         start_time = time.time()
 
         try:
+            # 参数验证
             if not prompt or not scenarioType or not language:
                 raise ValidationError("缺少必要参数")
+
             logger.info(f"开始生成语音文本")
+
             # 生成文本
             sys_prompt = self.system_prompts.get("text_to_script")
-            user_prompt = f"Here is the request from the user: {prompt}\n\n, the scenario type is {scenarioType}, the language is {language}"
+            user_prompt = (
+                f"Here is the request from the user: {prompt}\n\n"
+                f"The scenario type is {scenarioType}, the language is {language}"
+            )
+
+            # 调用ChatGPT生成文本
             response = await self.chatgpt.chat(
                 system_prompt=sys_prompt,
                 user_prompt=user_prompt
@@ -136,17 +138,21 @@ class AudioGeneratorAgent:
             # 解析ChatGPT返回的结果
             transcript = response['response']["choices"][0]["message"]["content"].strip()
 
-            logger.info(f"生成语音文本成功，耗时: {time.time() - start_time:.2f}秒")
+            # 记录成功信息
+            processing_time = time.time() - start_time
+            logger.info(f"生成语音文本成功，耗时: {processing_time:.2f}秒")
+
+            # 返回结果
             return {
-                "llm_processing_cost": response['cost'],
-                "metadata": {
-                    "language": "zh-CN",
-                    "context": "storytelling",
-                    "speed": "medium",
-                    'generated_at': datetime.now().isoformat(),
-                    'processing_time': time.time() - start_time
-                },
                 "transcript": transcript,
+                "metadata": {
+                    "prompt": prompt,
+                    "language": language,
+                    "scenarioType": scenarioType,
+                    "llm_processing_cost": response['cost'],
+                    'generated_at': datetime.now().isoformat(),
+                    'processing_time': processing_time
+                },
             }
         except ValidationError:
             # 直接向上传递验证错误
@@ -155,69 +161,88 @@ class AudioGeneratorAgent:
             # 直接向上传递API错误
             raise
         except Exception as e:
-            logger.error(f"分析评论方面时发生未预期错误: {str(e)}")
-            raise InternalServerError(f"分析评论方面时发生未预期错误: {str(e)}")
+            logger.error(f"生成语音文本时发生未预期错误: {str(e)}")
+            raise InternalServerError(f"生成语音文本时发生未预期错误: {str(e)}")
 
-    async def script_to_audio(self, text: str, language: str, gender: str, age: str, speed: int = 1) -> Dict[str, Any]:
+    async def script_to_audio(
+            self,
+            text: str,
+            language: str = "en",
+            gender: str = "male",
+            age: str = "middle-aged",
+            voice_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
-        根据自定义text生成Tiktok音频
+        根据自定义text生成音频
 
         Args:
             text: 待转换的文本
             language: 语言
             gender: 性别
             age: 年龄
-            speed: 语速
+            voice_id: 特定声音ID（可选）
 
         Returns:
             生成的音频文件信息
         """
-
         start_time = time.time()
+
         try:
             logger.info(f"开始生成音频")
-            # 获取发音人列表
-            speakers = await self.genny.get_speakers(gender, age, language)
 
-            if len(speakers) == 0:
-                logger.error("该语言和性别没有可用的发音人")
-                raise ExternalAPIError("该语言和性别没有可用的发音人, 请尝试其他配置")
+            # 获取发音人列表
+            voices = await self.elevenLabs.get_voices(language, gender, age, voice_id)
+
+            if not voices:
+                error_msg = "该语言和性别没有可用的发音人, 请尝试其他配置"
+                logger.error(error_msg)
+                raise ExternalAPIError(error_msg)
 
             # 选择第一个发音人
-            speaker_id = speakers[0]['id']
-            speaker_name = speakers[0]['displayName']
+            selected_voice_id = voices[0]
 
-            # 生成音频文件
-            audio_info = await self.genny.generate_voice(text, speaker_id, speed)
+            # 生成音频
+            audio_url = await self.elevenLabs.text_to_speech(selected_voice_id, text)
 
+            # 计算处理时间
+            processing_time = time.time() - start_time
+
+            # 构建结果
             audio_summary = {
-                "audio_url": audio_info['data'][0]['urls'][0],
-                "progress": audio_info['progress'],
-                "status": audio_info['status'],
+                "audio_url": audio_url,
+                "text": text,
                 "meta": {
-                    "speaker": speaker_name,
+                    "voice_id": selected_voice_id,
                     "language": language,
                     "gender": gender,
                     "age": age,
-                    "speed": speed,
                     "generated_at": datetime.now().isoformat(),
-                    "processing_time": time.time() - start_time
+                    "processing_time": processing_time
                 }
             }
 
-            logger.info(f"生成Tiktok音频成功，耗时: {time.time() - start_time:.2f}秒")
+            logger.info(f"生成音频成功，耗时: {processing_time:.2f}秒")
 
             return audio_summary
-        except ExternalAPIError as e:
-            logger.error(f"无法生成Tiktok音频: {str(e)}")
-            raise ExternalAPIError("无法生成Tiktok音频")
-        except Exception as e:
-            logger.error(f"未知错误: {str(e)}")
-            raise InternalServerError("未知错误")
 
-    async def text_to_audio(self, prompt: str, scenarioType: str, language: str, gender: str, age: str, speed: int = 1) -> Dict[str, Any]:
+        except ExternalAPIError as e:
+            logger.error(f"无法生成音频: {str(e)}")
+            raise ExternalAPIError(f"无法生成音频: {str(e)}")
+        except Exception as e:
+            logger.error(f"生成音频时发生未知错误: {str(e)}")
+            raise InternalServerError(f"生成音频时发生未知错误: {str(e)}")
+
+    async def text_to_audio(
+            self,
+            prompt: str,
+            scenarioType: str,
+            language: str,
+            gender: str,
+            age: str,
+            voice_id: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
-        根据用户输入关键词生成音频
+        根据用户输入关键词生成音频（一键生成）
 
         Args:
             prompt: 用户提示
@@ -225,21 +250,47 @@ class AudioGeneratorAgent:
             language: 语言
             gender: 性别
             age: 年龄
-            speed: 语速
+            voice_id: 自定义发音人ID（可选）
 
         Returns:
-            转换后的文本
+            生成的音频及文本信息
         """
         start_time = time.time()
 
         try:
-            # 生成文本
-            script = await self.text_to_script(prompt, scenarioType, language)
+            # 第一步：生成文本脚本
+            script_result = await self.text_to_script(prompt, scenarioType, language)
+            script_text = script_result['transcript']
+            script_metadata = script_result['metadata']
 
-            # 生成音频
-            audio = await self.script_to_audio(script['transcript'], language,gender, age, speed)
+            # 第二步：生成音频
+            audio_result = await self.script_to_audio(
+                text=script_text,
+                language=language,
+                gender=gender,
+                age=age,
+                voice_id=voice_id
+            )
 
-            return audio
+            # 计算总处理时间
+            total_processing_time = time.time() - start_time
+
+            # 构建完整结果
+            return {
+                "audio_url": audio_result['audio_url'],
+                "transcript": script_text,
+                "metadata": {
+                    "prompt": prompt,
+                    "llm_processing_cost": script_metadata['llm_processing_cost'],
+                    "language": language,
+                    "scenarioType": scenarioType,
+                    "gender": gender,
+                    "age": age,
+                    "voice_id": audio_result['meta']['voice_id'],
+                    'generated_at': datetime.now().isoformat(),
+                    'processing_time': total_processing_time
+                }
+            }
         except ValidationError:
             # 直接向上传递验证错误
             raise
@@ -247,24 +298,94 @@ class AudioGeneratorAgent:
             # 直接向上传递API错误
             raise
         except Exception as e:
-            logger.error(f"生成音频时发生未预期错误: {str(e)}")
-            raise InternalServerError(f"生成音频时发生未预期错误: {str(e)}")
+            logger.error(f"一键生成音频时发生未预期错误: {str(e)}")
+            raise InternalServerError(f"一键生成音频时发生未预期错误: {str(e)}")
+
+    async def create_voice(
+            self,
+            name: str,
+            files: List[str] = None,
+            description: Optional[str] = None,
+            labels: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        添加新声音（声音克隆）
+
+        Args:
+            name: 声音名称
+            files: 本地音频文件路径列表
+            description: 声音描述（可选）
+            labels: 标签JSON字符串（可选）
+
+        Returns:
+            创建的声音ID及元数据
+        """
+        start_time = time.time()
+
+        try:
+            file_count = len(files) if files else 0
+            logger.info(f"开始创建新声音，资源数量：{file_count}")
+
+            # 确保至少有一个资源
+            if not files or file_count == 0:
+                raise ValidationError("创建声音至少需要一个音频或视频资源")
+
+            # 验证文件路径
+            for file_path in files:
+                if not os.path.exists(file_path):
+                    raise ValidationError(f"文件不存在: {file_path}")
+
+            # 解析JSON标签（如果提供）
+            parsed_labels = None
+            if labels and isinstance(labels, str):
+                try:
+                    parsed_labels = json.loads(labels)
+                except json.JSONDecodeError:
+                    raise ValidationError("提供的标签不是有效的JSON格式")
+
+            # 使用SDK创建声音
+            voice_id = await self.elevenLabs.add_voice(
+                name=name,
+                files=files,
+                description=description,
+                labels=parsed_labels
+            )
+
+            # 计算处理时间
+            processing_time = time.time() - start_time
+
+            logger.info(f"成功创建新声音，ID: {voice_id}")
+
+            # 返回结果
+            return {
+                "voice_id": voice_id,
+                "meta": {
+                    "name": name,
+                    "files": files,
+                    "description": description,
+                    "labels": parsed_labels or labels,
+                    "created_at": datetime.now().isoformat(),
+                    "processing_time": processing_time
+                }
+            }
+        except ExternalAPIError as e:
+            logger.error(f"添加ElevenLabs声音失败: {str(e)}")
+            raise ExternalAPIError(f"添加ElevenLabs声音失败: {str(e)}")
+        except ValidationError as e:
+            logger.error(f"验证错误: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"创建声音时发生未知错误: {str(e)}")
+            raise InternalServerError(f"创建声音时发生未知错误: {str(e)}")
 
 
 async def run_test():
+    """测试函数"""
     agent = AudioGeneratorAgent()
-    prompt = "Create a short story about Nezha"
-    scenarioType = "storytelling"
-    language = "zh-CN"
-    gender = "female"
-    age = "young_adult"
+    files = ['recording.mp3']
+    result = await agent.create_voice(name="Test Voice", files=files)
+    print(result)
 
-    try:
-        result = await agent.text_to_audio(prompt, scenarioType, language, gender, age)
-        print(result)
-    except Exception as e:
-        print(e)
 
 if __name__ == "__main__":
     asyncio.run(run_test())
-
