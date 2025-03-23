@@ -7,9 +7,8 @@ from app.dependencies import verify_tikhub_api_key
 from app.config import settings
 from pydantic import BaseModel, Field
 import uuid
-from app.utils.job_manager import JobManager, JobStatus
 import time
-from agents.video_subtitles_agent import VideoSubtitlesAgent
+from agents.video_subtitles_agent import VideoSubtitlesAgent, JobManager
 from app.utils.logger import setup_logger
 from app.api.models.responses import create_response
 

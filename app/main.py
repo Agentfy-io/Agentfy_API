@@ -21,7 +21,7 @@ from app.api.routes import customer, auth, sentiment, video, audio, video_subtit
 from app.core.exceptions import CommentAPIException
 from app.utils.logger import setup_logger
 from app.dependencies import log_request_middleware
-from app.utils.cleanup import CleanupService
+from agents.video_subtitles_agent import CleanupService
 from app.config import settings
 from fastapi.staticfiles import StaticFiles
 
