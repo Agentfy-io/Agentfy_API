@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     TIKHUB_API_KEY: Optional[str] = Field(None, env="TIKHUB_API_KEY")
     LEMONFOX_API_KEY: Optional[str] = Field(None, env="LEMONFOX_API_KEY")
     LOVO_API_KEY: Optional[str] = Field(None, env="LOVO_API_KEY")
+    ELEVENLABS_API_KEY: Optional[str] = Field(None, env="ELEVENLABS_API_KEY")
 
     # TikHub API 配置
     TIKHUB_BASE_URL: str = Field("https://api.tikhub.io", env="TIKHUB_BASE_URL")
@@ -31,8 +32,8 @@ class Settings(BaseSettings):
     REPORT_PATH: str = Field("reports", env="REPORT_PATH")
 
     # 服务器设置
-    HOST: str = Field("0.0.0.0", env="HOST")
-    PORT: int = Field(8000, env="PORT")
+    HOST: str = Field("64.23.158.208", env="HOST")
+    PORT: int = Field(80, env="PORT")
     DEBUG: bool = Field(False, env="DEBUG")
 
     # 日志设置
@@ -47,14 +48,6 @@ class Settings(BaseSettings):
     DEFAULT_AI_MODEL: str = Field("gpt-4o-mini", env="DEFAULT_AI_MODEL")
     DEFAULT_TEMPERATURE: float = Field(0.7, env="DEFAULT_TEMPERATURE")
     DEFAULT_MAX_TOKENS: int = Field(15000, env="DEFAULT_MAX_TOKENS")
-
-    # 静态文件配置参数
-    UPLOAD_DIR: str = "uploads"
-    OUTPUT_DIR: str = "outputs"
-    STATIC_DIR: str = "static"
-    MAX_FILE_SIZE: int = 500 * 1024 * 1024  # 500MB
-    SUPPORTED_VIDEO_FORMATS: list = [".mp4", ".mov", ".avi", ".mkv", ".webm"]
-    CLEANUP_INTERVAL: int = 1800  # 一小时，单位秒
 
     class Config:
         env_file = ".env"

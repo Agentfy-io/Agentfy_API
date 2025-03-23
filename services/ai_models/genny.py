@@ -37,6 +37,12 @@ class Genny:
         Returns:
             返回发音人列表（dict）
         """
+        if gender not in ["male", "female"]:
+            raise ValueError("Invalid gender value, either male or female")
+
+        if age not in ["child", "teen", "adult", "senior"]:
+            raise ValueError("Invalid age value, either child, young_adult, mature_adult, teen, or old")
+
         headers = {
             "accept": "application/json",
             "content-type": "application/json",
@@ -50,7 +56,7 @@ class Genny:
 
         # use panda to filter the speakers
         speakers_df = pd.DataFrame(speakers['data'])
-        speakers_df = speakers_df[(speakers_df['gender'] == gender) & (speakers_df['ageRange'] == age) & (speakers_df['locale'] == language)]
+        speakers_df = speakers_df[(speakers_df['gender'] == gender) & (speakers_df['ageRange'] == age) & (speakers_df['locale'] == language) & (speakers_df['speakerType'] == 'global')]
 
         return speakers_df.to_dict(orient='records')
 
