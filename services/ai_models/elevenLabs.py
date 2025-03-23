@@ -1,7 +1,8 @@
 import asyncio
 import os
 import uuid
-from typing import Dict, Any, Optional, List, BinaryIO
+from typing import Dict, Any, Optional, List
+
 from elevenlabs import ElevenLabs
 from app.config import settings
 from app.utils.logger import setup_logger
@@ -11,7 +12,7 @@ from app.core.exceptions import ExternalAPIError
 logger = setup_logger(__name__)
 
 
-class elevenLabs:
+class ElevenLabsClient:
     """ElevenLabs API客户端封装类"""
 
     def __init__(self, api_key: Optional[str] = None, output_dir: str = "audio_files"):
@@ -35,72 +36,119 @@ class elevenLabs:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 
-    async def get_voices(self, language: str = "en", gender: str = "male", age: str = "middle-aged",
-                         voice_id: Optional[str] = None) -> list[str]:
+    async def get_voices(
+            self,
+            language: str = "en",
+            gender: str = "male",
+            age: str = "middle-aged",
+            voice_id: Optional[str] = None
+    ) -> List[str]:
         """
         获取所有可用声音
 
-        Returns:
-            声音信息列表
-        """
-        matched_voice_ids = []
+        Args:
+            language: 语音语言
+            gender: 性别 (male/female)
+            age: 年龄段 (young/middle-aged/old)
+            voice_id: 特定声音ID（如果提供则直接返回）
 
+        Returns:
+            匹配条件的声音ID列表
+        """
+        # 如果提供了特定voice_id，直接返回
         if voice_id:
             return [voice_id]
+
         if gender not in ["male", "female"]:
             raise ValueError("Invalid gender value, either male or female")
+
         if age not in ["young", "middle-aged", "old"]:
             raise ValueError("Invalid age value, either young, middle-aged, or old")
 
         try:
+            # 获取所有声音
             voices = self.client.voices.get_all()
-            voices = voices['voices']
-            for voice in voices:
-                labels = voice['labels']
-                if labels['gender'] == gender and labels['age'] == age and voice['fine_tuning']['language'] == language:
-                    matched_voice_ids.append(voice['voice_id'])
+            matched_voice_ids = []
+
+            # 筛选匹配条件的声音
+            for voice in voices.voices:
+                labels = voice.labels
+                if not labels:
+                    continue
+
+                if (labels['gender'] == gender and
+                        labels['age'] == age and
+                        voice.fine_tuning.language == language):
+                    matched_voice_ids.append(voice.voice_id)
+
             return matched_voice_ids
+
         except Exception as e:
             logger.error(f"获取ElevenLabs声音列表失败: {str(e)}")
             raise ExternalAPIError("获取ElevenLabs声音列表失败")
 
-    async def add_voice(self, name: str, files: List[str] = None,
-                        description: Optional[str] = None,
-                        labels: Optional[Dict[str, str]] = None) -> str:
+    async def add_voice(
+            self,
+            name: str,
+            files: Optional[List[str]] = None,
+            description: Optional[str] = None,
+            labels: Optional[Dict[str, str]] = None
+    ) -> str:
         """
         添加新声音（声音克隆）
 
         Args:
             name: 声音名称
-            files: 音频样本文件路径列表（可选）
+            files: 音频样本文件路径列表
             description: 声音描述（可选）
             labels: 标签字典（可选）
 
         Returns:
-            创建的声音信息
+            创建的声音ID
         """
         try:
-            # 准备音频文件
+            # 检查文件路径
             audio_files = []
+
             if files:
+                valid_extensions = (".mp3", ".mp4", ".webm", ".amr")
+
                 for file_path in files:
+                    # 检查文件格式
+                    if not str(file_path).lower().endswith(valid_extensions):
+                        raise ValueError(
+                            f"Invalid audio file format for {file_path}, "
+                            f"only mp3, MP4, webm, amr are supported"
+                        )
+
+                    # 检查文件是否存在
+                    if not os.path.exists(file_path):
+                        raise ValueError(f"File does not exist: {file_path}")
+
+                    # 读取文件内容
                     with open(file_path, "rb") as f:
                         audio_files.append(f.read())
 
             # 使用SDK创建声音
             voice = self.client.voices.add(
                 name=name,
-                description=description or "",
-                labels=labels or {}
+                files=audio_files,
+                description=description,
+                labels=labels
             )
 
-            return voice['voice_id']
+            return voice.voice_id
+
         except Exception as e:
             logger.error(f"添加ElevenLabs声音失败: {str(e)}")
-            raise ExternalAPIError("添加ElevenLabs声音失败")
+            raise ExternalAPIError(f"添加ElevenLabs声音失败: {str(e)}")
 
-    async def text_to_speech(self, voice_id: str, text: str,
-                             model_id: str = "eleven_multilingual_v2") -> str:
+    async def text_to_speech(
+            self,
+            voice_id: str,
+            text: str,
+            model_id: str = "eleven_multilingual_v2"
+    ) -> str:
         """
         将文本转换为语音并保存为文件
 
@@ -117,7 +165,7 @@ class elevenLabs:
             file_name = f"{uuid.uuid4()}.mp3"
             file_path = os.path.join(self.output_dir, file_name)
 
-            # 获取音频内容（可能是生成器）
+            # 获取音频内容
             audio_data = self.client.text_to_speech.convert(
                 voice_id=voice_id,
                 output_format="mp3_44100_128",
@@ -136,7 +184,7 @@ class elevenLabs:
                     # 处理字节数据情况
                     f.write(audio_data)
 
-            # 返回文件URL（这里返回的是本地路径，可以根据需要修改为HTTP URL）
+            # 返回文件URL（本地路径）
             file_url = f"file://{os.path.abspath(file_path)}"
             logger.info(f"保存音频文件成功: {file_url}")
             return file_url
@@ -145,8 +193,12 @@ class elevenLabs:
             logger.error(f"ElevenLabs语音生成失败: {str(e)}")
             raise ExternalAPIError(f"ElevenLabs语音生成失败: {str(e)}")
 
-    async def text_to_speech_stream(self, voice_id: str, text: str,
-                                    model_id: str = "eleven_multilingual_v2") -> str:
+    async def text_to_speech_stream(
+            self,
+            voice_id: str,
+            text: str,
+            model_id: str = "eleven_multilingual_v2"
+    ) -> str:
         """
         将文本转换为语音流并保存为文件
 
@@ -173,11 +225,10 @@ class elevenLabs:
 
             # 将流保存为文件
             with open(file_path, 'wb') as f:
-                # 读取流中的每个块并写入文件
                 for chunk in audio_stream:
                     f.write(chunk)
 
-            # 返回文件URL（这里返回的是本地路径，可以根据需要修改为HTTP URL）
+            # 返回文件URL（本地路径）
             file_url = f"file://{os.path.abspath(file_path)}"
             logger.info(f"保存音频文件成功: {file_url}")
             return file_url
@@ -188,8 +239,9 @@ class elevenLabs:
 
 
 async def main():
+    """测试函数"""
     # 初始化ElevenLabs客户端
-    elevenlabs = elevenLabs()
+    elevenlabs = ElevenLabsClient()
 
     # 测试 text_to_speech 方法
     file_url1 = await elevenlabs.text_to_speech(
@@ -198,12 +250,13 @@ async def main():
     )
     print(f"Non-streaming audio saved to: {file_url1}")
 
-    # 测试 text_to_speech_stream 方法
-    file_url2 = await elevenlabs.text_to_speech_stream(
-        voice_id="JBFqnCBsd6RMkjVDRZzb",
-        text="This is a test of the ElevenLabs streaming text to speech API."
+    # 测试 create voice 方法
+    voice_id = await elevenlabs.add_voice(
+        name="Test Voice",
+        files=["recording.mp3"],
+        description="This is a test voice",
     )
-    print(f"Streaming audio saved to: {file_url2}")
+    print(f"New voice created with ID: {voice_id}")
 
 
 if __name__ == "__main__":
