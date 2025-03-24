@@ -19,7 +19,7 @@ from services.ai_models.opencv import OpenCV
 from services.ai_models.videoOCR import VideoOCR
 from services.ai_models.whisper import WhisperLemonFox
 from services.crawler.tiktok.video_crawler import VideoCollector
-from services.cleaner.video_cleaner import VideoCleaner
+from services.cleaner.tiktok.video_cleaner import VideoCleaner
 from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError
 

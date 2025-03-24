@@ -23,8 +23,8 @@ from app.config import settings
 from app.utils.logger import setup_logger
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
-from services.cleaner.comment_cleaner import CommentCleaner
-from services.cleaner.video_cleaner import VideoCleaner
+from services.cleaner.tiktok.comment_cleaner import CommentCleaner
+from services.cleaner.tiktok.video_cleaner import VideoCleaner
 from services.crawler.tiktok.comment_crawler import CommentCollector
 from services.crawler.tiktok.video_crawler import VideoCollector
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
