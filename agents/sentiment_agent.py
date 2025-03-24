@@ -8,7 +8,7 @@
 import json
 import re
 from datetime import datetime
-from typing import Dict, Any, List, Optional, Union, AsyncGenerator
+from typing import Dict, Any, List, Optional, AsyncGenerator
 from collections import Counter
 import asyncio
 import time
@@ -23,9 +23,7 @@ from app.utils.logger import setup_logger
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from services.cleaner.comment_cleaner import CommentCleaner
-from services.crawler.comment_crawler import CommentCollector
-from services.crawler.video_crawler import VideoCollector
-from services.cleaner.video_cleaner import VideoCleaner
+from services.crawler.tiktok.comment_crawler import CommentCollector
 from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 

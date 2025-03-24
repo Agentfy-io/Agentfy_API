@@ -8,10 +8,10 @@ import asyncio
 from app.config import settings
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
-from typing import Dict, Any, List, Optional, AsyncGenerator
+from typing import Dict, Any, Optional, AsyncGenerator
 from dotenv import load_dotenv
 from app.utils.logger import logger
-from services.crawler.user_crawler import UserCollector
+from services.crawler.tiktok.user_crawler import UserCollector
 from services.cleaner.user_cleaner import UserCleaner
 
 # 加载环境变量

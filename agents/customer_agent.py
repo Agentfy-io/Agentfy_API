@@ -12,8 +12,7 @@ import time
 import asyncio
 from datetime import datetime
 import markdown
-from time import process_time
-from typing import Dict, Any, List, Optional, Union, AsyncGenerator
+from typing import Dict, Any, List, Optional, AsyncGenerator
 
 import numpy as np
 import pandas as pd
@@ -26,8 +25,8 @@ from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from services.cleaner.comment_cleaner import CommentCleaner
 from services.cleaner.video_cleaner import VideoCleaner
-from services.crawler.comment_crawler import CommentCollector
-from services.crawler.video_crawler import VideoCollector
+from services.crawler.tiktok.comment_crawler import CommentCollector
+from services.crawler.tiktok.video_crawler import VideoCollector
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 
 # 设置日志记录器
