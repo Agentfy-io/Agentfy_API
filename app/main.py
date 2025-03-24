@@ -13,7 +13,7 @@ from fastapi.openapi.utils import get_openapi
 import uvicorn
 from dotenv import load_dotenv
 
-from .api.routes import customer, auth, sentiment, video, audio, user
+from .api.routes import customer, auth, sentiment, video, audio, user, xhs
 from .core.exceptions import CommentAPIException
 from .utils.logger import setup_logger
 from .dependencies import log_request_middleware
