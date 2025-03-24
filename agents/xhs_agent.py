@@ -1,17 +1,11 @@
-import asyncio
 import datetime
 import json
 import re
 import time
-import traceback
-from pathlib import Path
-from typing import Union, Dict, Any, List, Optional, AsyncGenerator
-
-import pandas as pd
+from typing import Union, Dict, Any, Optional, AsyncGenerator
 
 # 导入日志模块
 from app.utils.logger import setup_logger
-from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
 
 from services.ai_models.chatgpt import ChatGPT

@@ -8,7 +8,7 @@ logger = setup_logger(__name__)
 
 
 class VideoCleaner:
-    """TikTok视频清洗器，负责处理和标准化原始视频数据"""
+    """抖音视频清洗器，负责处理和标准化原始视频数据"""
 
     @staticmethod
     async def clean_single_video(video_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -29,6 +29,7 @@ class VideoCleaner:
 
         try:
             detail = video_data
+
             # 处理视频码率（bit_rate）字段
             bit_rate_list = detail.get("video", {}).get("bit_rate", [])
             if bit_rate_list and isinstance(bit_rate_list[0], dict):
@@ -40,6 +41,7 @@ class VideoCleaner:
             video_url_list = detail.get("video", {}).get("play_addr", {}).get("url_list", [])
             video_url = video_url_list[-1] if video_url_list else None
 
+            # 构建清洗后的标准化数据结构
             cleaned_data = {
                 # 基础信息
                 "aweme_id": detail.get("aweme_id", None),  # 视频ID
@@ -98,7 +100,7 @@ class VideoCleaner:
                 "allow_share": detail.get("video_control", {}).get("allow_share", None),  # 允许分享
                 "allow_download": detail.get("video_control", {}).get("allow_download", None),  # 允许下载
                 "allow_comment": detail.get("status", {}).get("allow_comment", None),  # 允许评论
-                "allow_react": detail.get("video_control", {}).get("allow_react", None),  # 允许 react
+                "allow_react": detail.get("video_control", {}).get("allow_react", None),  # 允许react
 
                 # 视频类型标签
                 "video_tags": [
@@ -115,8 +117,8 @@ class VideoCleaner:
             return cleaned_data
 
         except Exception as e:
-            logger.error(f"清洗视频 数据时出错: {str(e)}")
-            # 返回基本数据，不中断流程
+            logger.error(f"清洗视频数据时出错: {str(e)}")
+            # 返回空字典，不中断流程
             return {}
 
     async def clean_videos_by_keyword(
@@ -159,6 +161,7 @@ class VideoCleaner:
                 cleaned_videos.append(cleaned_video)
             except Exception as e:
                 failed_count += 1
+                logger.debug(f"处理单个视频时出错: {str(e)}")
                 continue
 
         logger.info(f"已成功清洗 {len(cleaned_videos)} 个关键词视频，失败 {failed_count} 个")
