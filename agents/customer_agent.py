@@ -719,6 +719,9 @@ class CustomerAgent:
                         # 过滤无效评论
                         merged_df = merged_df.drop_duplicates('commenter_uniqueId')
 
+                        # 去除重复的column
+                        merged_df = merged_df.loc[:, ~merged_df.columns.duplicated()]
+
                         # 计算参与度分数
                         merged_df['engagement_score'] = merged_df.apply(
                             lambda row: self._calculate_engagement_score(
