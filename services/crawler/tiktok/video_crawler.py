@@ -9,7 +9,7 @@ from torch.utils.tensorboard.summary import video
 from app.utils.logger import setup_logger
 from app.config import settings
 from app.core.exceptions import ExternalAPIError, ValidationError, RateLimitError
-from services.cleaner.video_cleaner import VideoCleaner
+from services.cleaner.tiktok.video_cleaner import VideoCleaner
 
 # 设置日志记录器
 logger = setup_logger(__name__)

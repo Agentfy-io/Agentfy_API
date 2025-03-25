@@ -14,6 +14,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 
+
 from typing import  Optional, Dict, Any
 from app.api.routes import customer, auth, sentiment, video, audio, user, video_subtitles
 
@@ -23,6 +24,7 @@ from app.dependencies import log_request_middleware
 from agents.video_subtitles_agent import CleanupService
 from app.config import settings
 from fastapi.staticfiles import StaticFiles
+
 
 
 
@@ -173,7 +175,11 @@ app.include_router(user.router, prefix="/api/v1", tags=["用户/达人分析"])
 app.include_router(sentiment.router, prefix="/api/v1", tags=["评论舆情分析"])
 app.include_router(video.router, prefix="/api/v1", tags=["视频全方位分析"])
 app.include_router(audio.router, prefix="/api/v1", tags=["短视频脚本/音频生成"])
+
 app.include_router(video_subtitles.router, prefix="/api/v1", tags=["视频字幕生成"])
+
+app.include_router(xhs.router, prefix="/api/v1", tags=["小红书生成"])
+
 
 # 全局异常处理
 @app.exception_handler(CommentAPIException)

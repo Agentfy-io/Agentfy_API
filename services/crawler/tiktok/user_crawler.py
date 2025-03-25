@@ -1,7 +1,6 @@
 import asyncio
-import json
 import aiohttp
-from typing import List, Dict, Any, Optional, AsyncGenerator
+from typing import List, Dict, Optional, AsyncGenerator
 import os
 from aiohttp import ClientSession
 from dotenv import load_dotenv
@@ -9,7 +8,7 @@ from dotenv import load_dotenv
 from app.core.exceptions import ValidationError, ExternalAPIError, RateLimitError
 from app.utils.logger import setup_logger
 from app.config import settings
-from services.cleaner.user_cleaner import UserCleaner
+from services.cleaner.tiktok.user_cleaner import UserCleaner
 
 # 设置日志记录器
 logger = setup_logger(__name__)
