@@ -357,8 +357,9 @@ class VideoSubtitlesAgent:
             url: 文件URL
             output_path: 保存路径
         """
+        proxy = "http://127.0.0.1:7890"
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=self.headers) as response:
+            async with session.get(url, headers=self.headers,proxy=proxy) as response:
                 if response.status != 200:
                     raise Exception(f"下载失败: HTTP {response.status}")
 
@@ -429,7 +430,8 @@ class VideoSubtitlesAgent:
             }
         video_cleaner = VideoCleaner()
         cleaned_video_data = await video_cleaner.clean_single_video(video_data['video'])
-        video_url = cleaned_video_data['video']['share_url']
+
+        video_url = cleaned_video_data['video']['play_address']
 
 
         logger.info(f"✅ 已获取视频url数据: {video_url}")
@@ -569,7 +571,7 @@ class VideoSubtitlesAgent:
 
     async def translate_with_chagpt(self,text: str, source_lang: str, target_lang: str) -> str:
         system_prompt = "你是一位专业的翻译助手，能够准确地将任何语言翻译成目标语言。"
-        user_prompt = (f"请将以下{source_lang}文本翻译为{target_lang}：\n"
+        user_prompt = (f"请将以下文本翻译为{target_lang}：\n"
                        f"{text}")
         chat_translate = ChatGPT()
         translated_text = await chat_translate.chat(
@@ -580,8 +582,7 @@ class VideoSubtitlesAgent:
             max_tokens=10000,
             timeout=60,
         )
-
-        return translated_text["choices"][0]["message"]["content"].strip()
+        return translated_text["response"]["choices"][0]["message"]["content"].strip()
 
 
 class CleanupService:
@@ -985,8 +986,8 @@ async def text_to_subtitles(text: str, duration: float, max_words_per_line: int 
     sentences = [s for s in sentences if s.strip()]
 
     # 估计每个单词的平均时长
-    words = clean_text.split()
-    total_words = len(words)
+    # words = clean_text.split()
+    total_words = len(clean_text)
     avg_word_duration = duration / max(total_words, 1)
 
     # 构建字幕
@@ -1003,11 +1004,11 @@ async def text_to_subtitles(text: str, duration: float, max_words_per_line: int 
             if not chunk:
                 continue
 
-            word_count = len(chunk.split())
+            word_count = len(chunk)
             chunk_duration = word_count * avg_word_duration
-
             # 确保每条字幕至少显示1秒
             chunk_duration = max(chunk_duration, 1.0)
+
 
             end_time = min(current_time + chunk_duration, duration)
 
@@ -1021,7 +1022,8 @@ async def text_to_subtitles(text: str, duration: float, max_words_per_line: int 
             if current_time >= duration:
                 break
 
-        # 在句子之间添加一点间隔
+
+        # # 在句子之间添加一点间隔
         current_time = min(current_time + 0.2, duration)
 
     return subtitles

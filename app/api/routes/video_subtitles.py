@@ -64,7 +64,8 @@ async def video_subtitles_generator(tikhub_api_key: str = Depends(verify_tikhub_
 async def create_subtitles(
         request: Request,
         file: Optional[UploadFile] = File(None,description="本地路径"),
-        aweme_id: Optional[str] = Form(None,description="TikTok视频ID"),
+        # aweme_id: Optional[str] = Form(None,description="TikTok视频ID"),
+        aweme_id: Optional[str] = Query(None,description="TikTok视频ID"),
         source_language: Optional[str] = Form("auto"),
         target_language: str = Form(...),
         subtitle_format: str = Form("srt"),
@@ -170,7 +171,7 @@ async def batch_generate_subtitles(
 @router.post("/subtitles_extract", response_model=JobResponse)
 async def extract_subtitles_route(
         file: Optional[UploadFile] = File(None),
-        aweme_id: Optional[str] = Form(None),
+        aweme_id: Optional[str] = Query(None,description="TikTok视频ID"),
         video_subtitles_agent: VideoSubtitlesAgent = Depends(video_subtitles_generator)
 ):
     """
@@ -215,7 +216,7 @@ async def extract_subtitles_route(
 @router.post("/subtitles_remove", response_model=JobResponse)
 async def remove_subtitles_route(
         file: Optional[UploadFile] = File(None),
-        aweme_id: Optional[str] = Form(None),
+        aweme_id: Optional[str] = Query(None,description="TikTok视频ID"),
         video_subtitles_agent: VideoSubtitlesAgent = Depends(video_subtitles_generator)
 ):
     """
