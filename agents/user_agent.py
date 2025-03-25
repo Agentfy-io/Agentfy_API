@@ -1381,8 +1381,6 @@ class UserAgent:
         try:
             async for fans_batch in self.user_collector.stream_user_fans(url):
                 cleaned_fans = await self.user_cleaner.clean_user_fans(fans_batch)
-                print(fans_count)
-                print(max_fans)
                 remain = max_fans - fans_count
                 if remain > len(cleaned_fans):
                     fans_data.extend(cleaned_fans)
