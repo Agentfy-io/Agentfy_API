@@ -375,10 +375,13 @@ class XHSAgent:
 
         video_list = []  # 临时存储分析结果
         content = ""  # 生成的内容
+        max_videos = 10  # 最大视频数量
 
         try:
             # 获取抖音视频搜索结果
             async for video in self.video_crawler.stream_video_search_results(keyword):
+                if len(video_list) >= max_videos:
+                    break
                 # 获取视频数据
                 video_data = await self.video_cleaner.clean_videos_by_keyword(video)
                 video_list.extend(video_data)
@@ -403,12 +406,10 @@ class XHSAgent:
 
             sorted_list = sorted(video_list, key=lambda x: x.get('statistics', {}).get('digg_count', 0), reverse=True)
             top_video = sorted_list[0]
-            print(top_video)
 
             # 获取抖音视频链接和描述
             video_url = top_video.get("video_url")
             desc = top_video.get("desc")
-            print(video_url, desc)
 
             # 抖音视频转录
             transcription_data = await self.transcriptions(
@@ -437,3 +438,30 @@ class XHSAgent:
         except Exception as e:
             logger.error(f"处理失败: {str(e)}")
             raise InternalServerError(f"处理失败: {str(e)}")
+
+async def main():
+    xhs_agent = XHSAgent()
+
+    # Test URL to XHS
+    """
+    item_url = "https://v.douyin.com/e5wQr3V/"
+    result = await xhs_agent.url_to_xhs(item_url)
+    print(result)
+    """
+
+    # Test Keyword to XHS
+    keywords = ["滚轮微针", "居家水光", "水光滚轮工具", "水光滚轮工具怎么选？", "居家水光怎么做"]
+    count = 0
+
+    for keyword in keywords:
+        count += 1
+        async for result in xhs_agent.keyword_to_xhs(keyword):
+            if result["is_complete"]:
+                # save as json file with indent, allow special characters
+                with open(f"{count}.json", "w", encoding="utf-8") as f:
+                    json.dump(result, f, ensure_ascii=False, indent=4)
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
