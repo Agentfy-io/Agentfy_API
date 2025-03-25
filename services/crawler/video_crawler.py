@@ -418,8 +418,6 @@ async def main():
     collector = VideoCollector(api_key=os.getenv("TIKHUB_API_KEY"))
     cleaner = VideoCleaner()
 
-
-
     #流式收集关键词视频
     async for batch in collector.stream_videos_by_keyword("tiktok", count=10, concurrency=2):
         cleaned_video = await cleaner.clean_videos_by_keyword(batch)
