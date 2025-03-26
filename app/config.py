@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     DEFAULT_TEMPERATURE: float = Field(0.7, env="DEFAULT_TEMPERATURE")
     DEFAULT_MAX_TOKENS: int = Field(15000, env="DEFAULT_MAX_TOKENS")
 
+    # 静态文件配置参数
+    UPLOAD_DIR: str = "uploads"
+    OUTPUT_DIR: str = "outputs"
+    STATIC_DIR: str = "static"
+    MAX_FILE_SIZE: int = 500 * 1024 * 1024  # 500MB
+    SUPPORTED_VIDEO_FORMATS: list = [".mp4", ".mov", ".avi", ".mkv", ".webm"]
+    CLEANUP_INTERVAL: int = 1800  # 一小时，单位秒
+
+
     class Config:
         env_file = ".env"
         case_sensitive = True
