@@ -122,6 +122,7 @@ class VideoGeneratorAgent:
                       "content": "Actually, I met with Musk last week and he told me they're developing a completely new AI product that hasn't been announced yet...",
                       "highlight_reason": "Exclusive revelation about unreleased product information that will spark discussion",
                       "suggested_title": "SHOCKING! Streamer reveals Musk's secret AI plans #TechLeaks"
+                      "Tags": ["Tech", "AI", "Elon Musk"]
                     },
                     ...
                   ],
