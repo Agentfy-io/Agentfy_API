@@ -186,20 +186,26 @@ class AudioGeneratorAgent:
             生成的音频文件信息
         """
         start_time = time.time()
+        selected_voice_id = ""
 
         try:
             logger.info(f"开始生成音频")
 
-            # 获取发音人列表
-            voices = await self.elevenLabs.get_voices(language, gender, age, voice_id)
+            if voice_id:
+                # 使用特定声音ID
+                selected_voice_id = voice_id
 
-            if not voices:
-                error_msg = "该语言和性别没有可用的发音人, 请尝试其他配置"
-                logger.error(error_msg)
-                raise ExternalAPIError(error_msg)
+            elif not voice_id:
+                # 获取发音人列表
+                voices = await self.elevenLabs.get_voices(language, gender, age)
 
-            # 选择第一个发音人
-            selected_voice_id = voices[0]
+                if not voices:
+                    error_msg = "该语言和性别没有可用的发音人, 请尝试其他配置"
+                    logger.error(error_msg)
+                    raise ExternalAPIError(error_msg)
+
+                # 选择第一个发音人
+                selected_voice_id = voices[0]
 
             # 生成音频
             audio_url = await self.elevenLabs.text_to_speech(selected_voice_id, text)
@@ -237,8 +243,8 @@ class AudioGeneratorAgent:
             prompt: str,
             scenarioType: str,
             language: str,
-            gender: str,
-            age: str,
+            gender: Optional[str],
+            age: Optional[str],
             voice_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
