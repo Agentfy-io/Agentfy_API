@@ -12,12 +12,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 import uvicorn
 from dotenv import load_dotenv
-
-
-
 from typing import  Optional, Dict, Any
-from app.api.routes import customer, auth, sentiment, video, audio, user, video_subtitles
-
+from app.api.routes import customer, auth, sentiment, video, audio, user, video_subtitles,xhs
 from app.core.exceptions import CommentAPIException
 from app.utils.logger import setup_logger
 from app.dependencies import log_request_middleware

@@ -1,3 +1,5 @@
+import logging
+
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from typing import Dict, Any, List, Optional, Union, Tuple
@@ -12,7 +14,7 @@ import uuid
 import aiofiles
 from datetime import datetime, timedelta
 import aiohttp
-from services.crawler.comment_crawler import VideoCollector, VideoCleaner
+from services.crawler.tiktok.comment_crawler import VideoCollector, VideoCleaner
 from services.ai_models.whisper import WhisperLemonFox
 import tempfile
 import time
@@ -78,6 +80,8 @@ class VideoSubtitlesAgent:
 
         return file_path
 
+
+
     async def process_video(self,
             file_path: Optional[str],
             aweme_id: Optional[str],
@@ -90,17 +94,13 @@ class VideoSubtitlesAgent:
 
 
         try:
-            # 参数验证
-            if not file_path and not aweme_id:
-                raise HTTPException(status_code=400, detail="必须提供视频文件或TikTok视频ID")
             # 更新作业状态
             self.job_manager.update_job(job_id, JobStatus.PROCESSING, "正在处理视频...")
 
             # 获取视频
             video_path = None
             if file_path:
-                video_path = await self.save_upload_file(file_path)
-                logger.info(f"获取视频 {video_path} 的路径")
+                video_path = file_path
             elif aweme_id:
                 self.job_manager.update_job(job_id, JobStatus.PROCESSING, "正在下载TikTok视频...")
                 video_path = await self.download_tiktok_video(aweme_id, settings.UPLOAD_DIR)
@@ -113,7 +113,7 @@ class VideoSubtitlesAgent:
             transcript = await self.recognize_speech(video_path, source_language)
 
             # 如果需要翻译
-            if source_language != target_language and source_language != "auto":
+            if source_language != target_language:
                 self.job_manager.update_job(job_id, JobStatus.PROCESSING, "正在翻译字幕...")
                 translated_text = await self.translate_text(transcript, source_language, target_language)
             else:
@@ -127,7 +127,6 @@ class VideoSubtitlesAgent:
                 output_dir=settings.OUTPUT_DIR,
                 subtitle_format=subtitle_format
             )
-            print(output_video_path, srt_path)
 
             # 将输出文件移动到静态目录
             output_filename = os.path.basename(output_video_path)
@@ -191,7 +190,10 @@ class VideoSubtitlesAgent:
             # 并行处理视频
             tasks = []
             for i, video_data in enumerate(videos_data):
-                file_path = FileWrapper(video_data.get("file_path"))
+                # file_path = FileWrapper(video_data.get("file_path"))
+                file_path = video_data.get("file_path")
+                # if file_path:
+                #     file_path = self.save_upload_file(file_path)
                 aweme_id = video_data.get("aweme_id")
 
                 task = asyncio.create_task(
@@ -268,7 +270,7 @@ class VideoSubtitlesAgent:
             # 获取视频
             video_path = None
             if file_path:
-                video_path = await self.save_upload_file(file_path)
+                video_path = file_path
             elif aweme_id:
                 self.job_manager.update_job(job_id, JobStatus.PROCESSING, "正在下载TikTok视频...")
                 video_path = await self.download_tiktok_video(aweme_id, settings.UPLOAD_DIR)
@@ -313,7 +315,7 @@ class VideoSubtitlesAgent:
             # 获取视频
             video_path = None
             if file_path:
-                video_path = await self.save_upload_file(file_path)
+                video_path = file_path
             elif aweme_id:
                 self.job_manager.update_job(job_id, JobStatus.PROCESSING, "正在下载TikTok视频...")
                 video_path = await self.download_tiktok_video(aweme_id, settings.UPLOAD_DIR)
@@ -469,6 +471,7 @@ class VideoSubtitlesAgent:
         ]
 
         await self.run_command(cmd)
+        logging.info(f"{temp_audio}")
         return temp_audio
 
     async def recognize_speech(self,video_path: str, language: str = "auto") -> str:

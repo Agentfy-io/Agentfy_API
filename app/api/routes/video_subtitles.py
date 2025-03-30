@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
 from imaplib import IMAP4
 
-from fastapi import APIRouter, File, UploadFile, Query, Depends, Form, HTTPException, Request
+from fastapi import APIRouter, File, UploadFile, Query, Depends, Form, HTTPException, Request, BackgroundTasks
 from typing import List, Optional, Dict, Any, Union
+
+from multipart import file_path
+
 from app.dependencies import verify_tikhub_api_key
 from app.config import settings
 from pydantic import BaseModel, Field
@@ -63,8 +66,8 @@ async def video_subtitles_generator(tikhub_api_key: str = Depends(verify_tikhub_
 @router.post("/subtitles_generate", response_model=JobResponse)
 async def create_subtitles(
         request: Request,
+        background_tasks: BackgroundTasks,
         file: Optional[UploadFile] = File(None,description="本地路径"),
-        # aweme_id: Optional[str] = Form(None,description="TikTok视频ID"),
         aweme_id: Optional[str] = Query(None,description="TikTok视频ID"),
         source_language: Optional[str] = Form("auto"),
         target_language: str = Form(...),
@@ -77,48 +80,35 @@ async def create_subtitles(
     - 支持多语言转换
     - 返回带字幕的视频链接和SRT文件
     """
+    # 参数验证
+    if not file and not aweme_id:
+        raise HTTPException(status_code=400, detail="必须提供视频文件或TikTok视频ID")
 
+    file_path = None
+    if file:
+        file_path = await video_subtitles_agent.save_upload_file(file)
 
     # 创建作业
     job_id = str(uuid.uuid4())
     job_manager.create_job(job_id)
 
-    start_time = time.time()
+    # 异步处理视频
+    background_tasks.add_task(
+        video_subtitles_agent.process_video,
+        file_path=file_path,
+        aweme_id=aweme_id,
+        source_language=source_language,
+        target_language=target_language,
+        subtitle_format=subtitle_format,
+        job_id=job_id
+    )
 
-
-    try:
-        logger.info(f"获取视频 {file}{aweme_id} 的字幕")
-
-        video_subtitles_data = await video_subtitles_agent.process_video(file,aweme_id, source_language, target_language, subtitle_format,job_id)
-
-        processing_time = time.time() - start_time
-        JobResponse_dict = {"job_id": job_id, "status": "queued", "message": "任务已加入队列"}
-        video_subtitles_result = create_response(
-            data=video_subtitles_data,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-
-        video_subtitles_result.update(JobResponse_dict)
-
-
-        return video_subtitles_result
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
+    return {"job_id": job_id, "status": "queued", "message": "任务已加入队列"}
 
 
 @router.post("/subtitles_batch", response_model=JobResponse)
 async def batch_generate_subtitles(
+        background_tasks: BackgroundTasks,
         request: BatchSubtitleRequest,
         video_subtitles_agent: VideoSubtitlesAgent = Depends(video_subtitles_generator)
 
@@ -128,48 +118,32 @@ async def batch_generate_subtitles(
     - 支持多视频并行处理
     - 支持批量作业状态追踪
     """
+    # 参数验证
+
+    if not request.video_sources:
+        raise HTTPException(status_code=400, detail="必须提供至少一个视频源")
+
     job_id = str(uuid.uuid4())
     job_manager.create_job(job_id)
 
-    start_time = time.time()
-    JobResponse_dict = {"job_id": job_id, "status": "queued", "message": "任务已加入队列"}
+    # 异步处理批量视频
+    background_tasks.add_task(
+        video_subtitles_agent.process_batch_videos,
+        videos_data=request.video_sources,
+        source_language=request.source_language,
+        target_language=request.target_language,
+        subtitle_format=request.subtitle_format,
 
-    try:
-        logger.info(f"批量获取视频 {request.video_sources} 的字幕")
+        job_id=job_id
+    )
 
-        video_batch_subtitles_data = await video_subtitles_agent.process_batch_videos(
-            request.video_sources,
-            request.source_language,
-            request.target_language,
-            request.subtitle_format,
-            job_id)
+    return {"job_id": job_id, "status": "queued", "message": "批量任务已加入队列"}
 
-        processing_time = time.time() - start_time
-
-        video_batch_subtitles_result = create_response(
-            data=video_batch_subtitles_data,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-        video_batch_subtitles_result.update(JobResponse_dict)
-
-        return video_batch_subtitles_result
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
 
 @router.post("/subtitles_extract", response_model=JobResponse)
 async def extract_subtitles_route(
+        background_tasks: BackgroundTasks,
         file: Optional[UploadFile] = File(None),
         aweme_id: Optional[str] = Query(None,description="TikTok视频ID"),
         video_subtitles_agent: VideoSubtitlesAgent = Depends(video_subtitles_generator)
@@ -179,42 +153,34 @@ async def extract_subtitles_route(
     - 支持上传视频文件或提供TikTok视频ID
     - 返回提取到的字幕文本和SRT文件
     """
+    # 参数验证
+    if not file and not aweme_id:
+        raise HTTPException(status_code=400, detail="必须提供视频文件或TikTok视频ID")
+
+    file_path = None
+    if file:
+        file_path = await video_subtitles_agent.save_upload_file(file)
+
+    # 创建作业
     job_id = str(uuid.uuid4())
     job_manager.create_job(job_id)
-    JobResponse_dict = {"job_id": job_id, "status": "queued", "message": "任务已加入队列"}
-    start_time = time.time()
 
-    try:
-        logger.info(f"批量获取视频 {file}{aweme_id} 的字幕")
+    # 异步提取字幕
+    background_tasks.add_task(
+        video_subtitles_agent.extract_video_subtitles,
+        file_path=file_path,
+        aweme_id=aweme_id,
+        job_id=job_id
+    )
 
-        video_extract_subtitles_data = await video_subtitles_agent.extract_video_subtitles(
-            file, aweme_id,job_id)
+    return {"job_id": job_id, "status": "queued", "message": "字幕提取任务已加入队列"}
 
-        processing_time = time.time() - start_time
 
-        video_extract_subtitles_result = create_response(
-            data=video_extract_subtitles_data,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-        video_extract_subtitles_result.update(JobResponse_dict)
-        return video_extract_subtitles_result
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
 
 @router.post("/subtitles_remove", response_model=JobResponse)
 async def remove_subtitles_route(
+        background_tasks: BackgroundTasks,
         file: Optional[UploadFile] = File(None),
         aweme_id: Optional[str] = Query(None,description="TikTok视频ID"),
         video_subtitles_agent: VideoSubtitlesAgent = Depends(video_subtitles_generator)
@@ -224,39 +190,28 @@ async def remove_subtitles_route(
     - 支持上传视频文件或提供TikTok视频ID
     - 返回移除字幕后的视频链接
     """
+    # 参数验证
+    if not file and not aweme_id:
+        raise HTTPException(status_code=400, detail="必须提供视频文件或TikTok视频ID")
+
+    file_path = None
+    if file:
+        file_path = await video_subtitles_agent.save_upload_file(file)
+
+    # 创建作业
     job_id = str(uuid.uuid4())
     job_manager.create_job(job_id)
-    JobResponse_dict = {"job_id": job_id, "status": "queued", "message": "任务已加入队列"}
-    start_time = time.time()
 
-    try:
-        logger.info(f"批量获取视频  {file}{aweme_id} 的字幕")
+    # 异步移除字幕
+    background_tasks.add_task(
+        video_subtitles_agent.remove_video_subtitles,
+        file_path=file_path,
+        aweme_id=aweme_id,
+        job_id=job_id
+    )
 
-        video_remove_subtitles_data = await video_subtitles_agent.remove_video_subtitles(
-            file, aweme_id,job_id)
+    return {"job_id": job_id, "status": "queued", "message": "字幕移除任务已加入队列"}
 
-        processing_time = time.time() - start_time
-
-        video_remove_subtitles_result = create_response(
-            data=video_remove_subtitles_data,
-            success=True,
-            processing_time_ms=round(processing_time * 1000, 2)
-        )
-
-        video_remove_subtitles_result.update(JobResponse_dict)
-        return video_remove_subtitles_result
-
-    except ValidationError as e:
-        logger.error(f"验证错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except ExternalAPIError as e:
-        logger.error(f"外部API错误: {e.detail}")
-        raise HTTPException(status_code=e.status_code, detail=e.detail)
-
-    except Exception as e:
-        logger.error(f"获取视频评论时发生未预期错误: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"内部服务器错误: {str(e)}")
 
 
 
