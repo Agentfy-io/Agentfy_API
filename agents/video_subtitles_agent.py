@@ -12,7 +12,8 @@ import uuid
 import aiofiles
 from datetime import datetime, timedelta
 import aiohttp
-from services.crawler.comment_crawler import VideoCollector, VideoCleaner
+from services.crawler.tiktok.video_crawler import VideoCollector
+from services.cleaner.tiktok.video_cleaner import VideoCleaner
 from services.ai_models.whisper import WhisperLemonFox
 import tempfile
 import time
@@ -54,7 +55,6 @@ class VideoSubtitlesAgent:
         self.job_manager=JobManager()
 
 
-
         # 如果没有提供TikHub API密钥，记录警告
         if not self.tikhub_api_key:
             logger.warning("未提供TikHub API密钥，某些功能可能不可用")
@@ -88,7 +88,6 @@ class VideoSubtitlesAgent:
     ) -> Dict[str, Any]:
         """处理视频并生成字幕"""
 
-
         try:
             # 参数验证
             if not file_path and not aweme_id:
@@ -110,6 +109,7 @@ class VideoSubtitlesAgent:
 
             # 进行语音识别
             self.job_manager.update_job(job_id, JobStatus.PROCESSING, "正在进行语音识别...")
+            logger.info(video_path)
             transcript = await self.recognize_speech(video_path, source_language)
 
             # 如果需要翻译
@@ -347,8 +347,6 @@ class VideoSubtitlesAgent:
             return {"error": str(e)}
 
 
-
-
     async def download_file(self,url: str, output_path: str) -> None:
         """
         异步下载文件
@@ -437,39 +435,67 @@ class VideoSubtitlesAgent:
         logger.info(f"✅ 已获取视频url数据: {video_url}")
         return video_url
 
-    async def run_command(self,cmd: List[str]) -> str:
+    async def run_command(self, cmd: List[str]) -> str:
         """异步运行命令并返回stdout"""
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
+        try:
+            # Create full process information for debugging
+            logger.info(f"Running command: {' '.join(cmd)}")
 
-        if process.returncode != 0:
-            logger.error(f"命令执行失败 (返回码 {process.returncode}): {stderr.decode()}")
-            raise Exception(f"命令执行失败: {stderr.decode()}")
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
 
-        return stdout.decode()
+            if process.returncode != 0:
+                error_msg = stderr.decode()
+                logger.error(f"Command execution failed (return code {process.returncode}): {error_msg}")
+                raise Exception(f"Command execution failed: {error_msg}")
+
+            return stdout.decode()
+        except FileNotFoundError:
+            logger.error(f"Command not found: {cmd[0]}")
+            raise Exception(f"Command not found: {cmd[0]}. Full path: {os.path.abspath(cmd[0])}")
+        except Exception as e:
+            logger.error(f"Error running command: {str(e)}")
+            raise
 
     async def extract_audio(self, video_path: str) -> str:
         """从视频中提取音频为WAV格式"""
-        # 使用临时文件
-        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.wav")
+        logger.info(f"extractaudio 从视频 {video_path} 提取音频")
+
+        # Ensure the file exists
+        if not os.path.exists(video_path):
+            raise FileNotFoundError(f"Video file not found: {video_path}")
+
+        # Get absolute path
+        video_path = os.path.abspath(video_path)
+
+        # Use temporary file
+        temp_audio = os.path.join(tempfile.gettempdir(), f"{uuid.uuid4()}.mp4")
+
+        # Specify full path to ffmpeg if needed
+        # FFMPEG_CMD = "C:/path/to/ffmpeg.exe"  # Uncomment and modify if needed
+        FFMPEG_CMD = "C:/ffmpeg/bin/ffmpeg.exe"  # Or keep as is if ffmpeg is in PATH
 
         cmd = [
-            "ffmpeg",
+            FFMPEG_CMD,
             "-i", video_path,
-            "-vn",  # 禁用视频
-            "-acodec", "pcm_s16le",  # 16位PCM编码
-            "-ar", "16000",  # 16kHz采样率
-            "-ac", "1",  # 单声道
-            "-y",  # 覆盖输出文件
+            "-vn",  # Disable video
+            "-acodec", "pcm_s16le",  # 16-bit PCM encoding
+            "-ar", "16000",  # 16kHz sampling rate
+            "-ac", "1",  # Mono
+            "-y",  # Overwrite output file
             temp_audio
         ]
 
-        await self.run_command(cmd)
-        return temp_audio
+        try:
+            await self.run_command(cmd)
+            return temp_audio
+        except Exception as e:
+            logger.error(f"Failed to extract audio: {str(e)}")
+            raise
 
     async def recognize_speech(self,video_path: str, language: str = "auto") -> str:
         """
@@ -907,9 +933,9 @@ class JobManager:
         parent_job["updated_at"] = time.time()
 
 
-# 常量定义
-FFMPEG_BIN = "ffmpeg"
-FFPROBE_BIN = "ffprobe"
+# Update these constants in your code
+FFMPEG_BIN = "C:/ffmpeg/bin/ffmpeg.exe"  # Use the actual path where you installed FFmpeg
+FFPROBE_BIN = "C:/ffmpeg/bin/ffprobe.exe"
 
 
 class Subtitle:
