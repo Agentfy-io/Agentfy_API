@@ -34,7 +34,7 @@ from app.core.exceptions import (
     InternalServerError,
 )
 from app.utils.logger import setup_logger
-from app.dependencies import verify_tikhub_api_key  # 从dependencies.py导入验证函数
+from app.dependencies import verify_tikhub_api_key, verify_openai_api_key, verify_lemonfox_api_key, verify_elevenlabs_api_key
 from app.config import settings
 
 # 设置日志记录器
@@ -48,9 +48,15 @@ task_results = {}
 
 
 # 依赖项：获取AudioGeneratorAgent实例
-async def get_audio_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
+async def get_audio_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key),
+                          openai_api_key: str = Depends(verify_openai_api_key),
+                          lemonfox_api_key: str = Depends(verify_lemonfox_api_key),
+                          elevenlabs_api_key: str = Depends(verify_elevenlabs_api_key)):
     """使用验证后的TikHub API Key创建AudioGeneratorAgent实例"""
-    return AudioGeneratorAgent(tikhub_api_key=tikhub_api_key)
+    return AudioGeneratorAgent(tikhub_api_key=tikhub_api_key,
+                               openai_api_key=openai_api_key,
+                               lemonfox_api_key=lemonfox_api_key,
+                               elevenlabs_api_key=elevenlabs_api_key)
 
 
 # 通用任务处理函数
@@ -144,7 +150,7 @@ def generate_task_id(prefix: str) -> str:
 
 
 @router.post(
-    "/text_to_script",
+    "/keyword_to_script",
     summary="【脚本生成】根据关键词/主题生成语音文本",
     description="""
 用途:
@@ -272,7 +278,7 @@ async def script_to_audio(
 
 
 @router.post(
-    "/text_to_audio",
+    "/keyword_to_audio",
     summary="【一键生成】关键词直接生成音频",
     description="""
 用途:

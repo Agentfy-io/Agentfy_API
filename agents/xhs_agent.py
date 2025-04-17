@@ -26,7 +26,9 @@ load_dotenv()
 class XHSAgent:
     """抖音内容转小红书的工具类，提供视频数据转换、转录和内容改写功能"""
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None, openai_api_key: Optional[str] = None,
+                 claude_api_key: Optional[str] = None,
+                 lemon_fox_api_key: Optional[str] = None):
         """
         初始化抖音到小红书转换工具
 
@@ -34,14 +36,14 @@ class XHSAgent:
             api_key: API密钥，如果不提供则使用环境变量中的默认值
         """
         # 初始化AI模型客户端
-        self.chatgpt = ChatGPT()
-        self.claude = Claude()
-        self.whisper = WhisperLemonFox()
-        self.video_crawler = DouYinCrawler()
+        self.chatgpt = ChatGPT(openai_api_key=openai_api_key)
+        self.claude = Claude( anthropic_api_key=claude_api_key)
+        self.whisper = WhisperLemonFox(lemon_fox_api_key=lemon_fox_api_key)
+        self.video_crawler = DouYinCrawler(tikhub_api_key)
         self.video_cleaner = VideoCleaner()
 
         # 保存API配置
-        self.api_key = api_key
+        self.api_key = tikhub_api_key
 
         # 如果没有提供API密钥，记录警告
         if not self.api_key:

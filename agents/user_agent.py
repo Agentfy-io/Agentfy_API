@@ -28,7 +28,7 @@ class UserAgent:
     标签和相似达人
     """
 
-    def __init__(self, tikhub_api_key: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None, openai_api_key: Optional[str] = None):
         """
         初始化达人分析器
 
@@ -39,7 +39,7 @@ class UserAgent:
         self.total_posts = 0
 
         # 初始化 ChatGPT 和 Claude
-        self.chatgpt = ChatGPT()
+        self.chatgpt = ChatGPT(openai_api_key=openai_api_key)
         self.claude = Claude()
 
         # 初始化 UserCollector 和 UserCleaner

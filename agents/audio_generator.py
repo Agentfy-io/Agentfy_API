@@ -21,7 +21,6 @@ from app.utils.logger import setup_logger
 from services.ai_models.chatgpt import ChatGPT
 from services.ai_models.claude import Claude
 from services.ai_models.whisper import WhisperLemonFox
-from services.ai_models.genny import Genny
 from services.ai_models.elevenLabs import ElevenLabsClient
 from app.config import settings
 from app.core.exceptions import ValidationError, ExternalAPIError, InternalServerError
@@ -39,7 +38,8 @@ class AudioGeneratorAgent:
     为创作者生成音频文件的代理类，提供文本到语音转换功能，支持多种语言和声音效果
     """
 
-    def __init__(self, tikhub_api_key: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None, openai_api_key: Optional[str] = None,
+                 lemonfox_api_key: Optional[str] = None, elevenlabs_api_key: Optional[str] = None):
         """
         初始化音频生成代理类
 
@@ -47,11 +47,10 @@ class AudioGeneratorAgent:
             tikhub_api_key: TikHub API密钥
         """
         # 初始化AI模型客户端
-        self.chatgpt = ChatGPT()
+        self.chatgpt = ChatGPT(openai_api_key)
         self.claude = Claude()
-        self.whisper = WhisperLemonFox()
-        self.genny = Genny()
-        self.elevenLabs = ElevenLabsClient()
+        self.whisper = WhisperLemonFox(lemonfox_api_key)
+        self.elevenLabs = ElevenLabsClient(api_key=elevenlabs_api_key)
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key

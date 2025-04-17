@@ -19,7 +19,7 @@ from app.core.exceptions import (
     InternalServerError
 )
 from app.utils.logger import setup_logger
-from app.dependencies import verify_tikhub_api_key  # 从dependencies.py导入验证函数
+from app.dependencies import verify_tikhub_api_key, verify_lemonfox_api_key, verify_openai_api_key, verify_claude_api_key
 import pandas as pd
 
 # 设置日志记录器
@@ -33,9 +33,17 @@ task_results = {}
 
 
 # 依赖项：获取XHSAgent实例
-async def get_xhs_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
+async def get_xhs_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key),
+                          lemonfox_api_key: str = Depends(verify_lemonfox_api_key),
+                          claude_api_key: str = Depends(verify_claude_api_key),
+                          openai_api_key: str = Depends(verify_openai_api_key)) -> XHSAgent:
     """使用验证后的TikHub API Key创建XHSAgent实例"""
-    return XHSAgent(api_key=tikhub_api_key)
+    return XHSAgent(
+        tikhub_api_key=tikhub_api_key,
+        lemon_fox_api_key=lemonfox_api_key,
+        openai_api_key=openai_api_key,
+        claude_api_key=claude_api_key,
+    )
 
 
 # 生成唯一任务ID的辅助函数

@@ -13,7 +13,6 @@ import asyncio
 from datetime import datetime
 import markdown
 from typing import Dict, Any, List, Optional, AsyncGenerator
-
 import numpy as np
 import pandas as pd
 from dotenv import load_dotenv
@@ -39,7 +38,7 @@ load_dotenv()
 class CustomerAgent:
     """处理TikTok评论的代理类，提供评论获取、分析和潜在客户识别功能"""
 
-    def __init__(self, tikhub_api_key: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None, openai_api_key: Optional[str] = None):
         """
         初始化CustomerAgent，加载API密钥和提示模板
 
@@ -49,7 +48,7 @@ class CustomerAgent:
         self.total_customers = 0
 
         # 初始化AI模型客户端
-        self.chatgpt = ChatGPT()
+        self.chatgpt = ChatGPT(openai_api_key=openai_api_key)
         self.claude = Claude()
 
         # 初始化收集器和清洁器
@@ -661,6 +660,7 @@ class CustomerAgent:
         start_time = time.time()
         potential_customers = []  # 临时存储分析结果
         llm_processing_cost = {'total_cost': 0.0, 'input_cost': 0.0, 'output_cost': 0.0}
+
 
         try:
             logger.info(f"开始流式获取视频 {aweme_id} 的潜在客户")

@@ -8,7 +8,7 @@ import json
 import random
 import string
 
-from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, Path, HTTPException, Request, Body, BackgroundTasks, Header
 from fastapi.responses import StreamingResponse
 from typing import Dict, Any, List, Optional
 import time
@@ -17,12 +17,9 @@ from app.api.models.responses import create_response
 from agents.customer_agent import CustomerAgent
 from app.core.exceptions import (
     ValidationError,
-    ExternalAPIError,
-    InternalServerError,
-    NotFoundError
 )
 from app.utils.logger import setup_logger
-from app.dependencies import verify_tikhub_api_key  # 从dependencies.py导入验证函数
+from app.dependencies import verify_tikhub_api_key, verify_openai_api_key
 from app.config import settings
 
 # 设置日志记录器
@@ -36,9 +33,16 @@ task_results = {}
 
 
 # 依赖项：获取CustomerAgent实例
-async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
-    """使用验证后的TikHub API Key创建CustomerAgent实例"""
-    return CustomerAgent(tikhub_api_key=tikhub_api_key)
+async def get_customer_agent(
+    tikhub_api_key: str = Depends(verify_tikhub_api_key),
+    openai_api_key: str = Depends(verify_openai_api_key)
+):
+    """使用验证后的TikHub和OpenAI API Key创建CustomerAgent实例"""
+    return CustomerAgent(
+        tikhub_api_key=tikhub_api_key,
+        openai_api_key=openai_api_key.replace("Bearer ", "").strip()  # 防止有人也加了 Bearer
+    )
+
 
 
 @router.post(
@@ -60,6 +64,7 @@ async def get_customer_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key
 （超高效舆情分析，助您精准捕捉热点！）
 """,
     response_model_exclude_none=True,
+    deprecated=True,
 )
 async def fetch_video_comments(
         request: Request,
@@ -192,6 +197,8 @@ async def stream_potential_customers(
         "aweme_id": aweme_id,
         "potential_customers": []
     }
+
+    logger.info(f"API key: {request.headers.get('Authorization')}")
 
     # 定义后台任务
     async def process_video_customers():

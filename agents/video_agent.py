@@ -33,17 +33,19 @@ load_dotenv()
 class VideoAgent:
     """视频全方位分析器，用于分析TikTok视频数据并生成综合报告。"""
 
-    def __init__(self, tikhub_api_key: Optional[str] = None):
+    def __init__(self, tikhub_api_key: Optional[str] = None, openai_api_key: Optional[str] = None,
+                 lemonfox_api_key: Optional[str] = None):
         """
         初始化VideoAgent。
 
         Args:
             tikhub_api_key: TikHub API密钥
-            tikhub_base_url: TikHub API基础URL
+            openai_api_key: OpenAI API密钥
         """
         # 初始化AI模型客户端
-        self.chatgpt = ChatGPT()
+        self.chatgpt = ChatGPT(openai_api_key=openai_api_key)
         self.claude = Claude()
+        self.whisper = WhisperLemonFox(lemon_fox_api_key=lemonfox_api_key)
 
         # 保存TikHub API配置
         self.tikhub_api_key = tikhub_api_key
@@ -472,11 +474,8 @@ class VideoAgent:
                 'processing_time_ms': round((time.time() - start_time) * 1000, 2)
             }
 
-            # 调用 AI 进行分析
-            whisper = WhisperLemonFox()
-
             # 获取视频文本转录
-            transcript = await whisper.transcriptions(
+            transcript = await self.whisper.transcriptions(
                 file=play_address,
                 response_format="verbose_json",
                 speaker_labels=False,

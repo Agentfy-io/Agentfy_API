@@ -15,8 +15,6 @@ logger = setup_logger(__name__)
 _customer_agent = None
 
 
-
-
 async def get_customer_agent() -> CustomerAgent:
     """
     获取CustomerAgent实例（单例模式）
@@ -30,45 +28,6 @@ async def get_customer_agent() -> CustomerAgent:
         _customer_agent = CustomerAgent()
 
     return _customer_agent
-
-
-async def verify_api_key(
-        x_api_key: Optional[str] = Header(None, description="API密钥")
-) -> None:
-    """
-    验证API密钥
-
-    Args:
-        x_api_key: 请求头中的API密钥
-
-    Returns:
-        None
-
-    Raises:
-        HTTPException: 当API密钥无效时
-    """
-    # 如果未设置API_KEY_REQUIRED或为False，则不需要验证API密钥
-    if not settings.API_KEY_REQUIRED:
-        return
-
-    # 验证API密钥
-    valid_api_keys = settings.API_KEYS
-
-    if not x_api_key:
-        logger.warning("请求未提供API密钥")
-        raise HTTPException(
-            status_code=401,
-            detail="缺少API密钥",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
-
-    if x_api_key not in valid_api_keys:
-        logger.warning(f"使用无效的API密钥: {x_api_key[:5]}...")
-        raise HTTPException(
-            status_code=401,
-            detail="API密钥无效",
-            headers={"WWW-Authenticate": "ApiKey"},
-        )
 
 
 async def log_request_middleware(request: Request, call_next):
@@ -116,11 +75,11 @@ async def log_request_middleware(request: Request, call_next):
 
 async def verify_tikhub_api_key(request: Request):
     """验证TikHub API Key并返回有效的Key"""
-    # 从请求头获取认证信息
-    authorization = request.headers.get("Authorization")
+    authorization = request.headers.get("authorization")
+    logger.info(request.headers)
 
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="请提供有效的TikHub API密钥，格式: Bearer YOUR_API_KEY")
+    if not authorization:
+        raise HTTPException(status_code=401, detail="请提供有效的TikHub API密钥，格式: YOUR_API_KEY")
 
     api_key = authorization.replace("Bearer ", "")
 
@@ -148,3 +107,49 @@ async def verify_tikhub_api_key(request: Request):
     except Exception as e:
         logger.error(f"验证TikHub API密钥时出错: {str(e)}")
         raise HTTPException(status_code=500, detail=f"验证TikHub API密钥时发生错误: {str(e)}")
+
+async def verify_openai_api_key(request: Request):
+    """验证OpenAI API Key并返回有效的Key"""
+    authorization = request.headers.get("openai-authorization")
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="请提供有效的OpenAI API密钥，格式: YOUR_API_KEY")
+
+    api_key = authorization.replace("Bearer ", "")
+
+    return api_key
+
+async def verify_claude_api_key(request: Request):
+    """验证Claude API Key并返回有效的Key"""
+    authorization = request.headers.get("claude-authorization")
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="请提供有效的Claude API密钥，格式: YOUR_API_KEY")
+
+    api_key = authorization.replace("Bearer ", "")
+
+    return api_key
+
+
+async def verify_lemonfox_api_key(request: Request):
+    """验证LemonFox API Key并返回有效的Key"""
+    authorization = request.headers.get("lemonfox-authorization")
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="请提供有效的LemonFox API密钥，格式: YOUR_API_KEY")
+
+    api_key = authorization.replace("Bearer ", "")
+
+    return api_key
+
+async def verify_elevenlabs_api_key(request: Request):
+    """验证ElevenLabs API Key并返回有效的Key"""
+    authorization = request.headers.get("elevenlabs-authorization")
+
+    if not authorization:
+        raise HTTPException(status_code=401, detail="请提供有效的ElevenLabs API密钥，格式: YOUR_API_KEY")
+
+    api_key = authorization.replace("Bearer ", "")
+
+    return api_key
+

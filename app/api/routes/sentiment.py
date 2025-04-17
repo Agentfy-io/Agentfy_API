@@ -21,7 +21,7 @@ from app.core.exceptions import (
     NotFoundError
 )
 from app.utils.logger import setup_logger
-from app.dependencies import verify_tikhub_api_key  # 从dependencies.py导入验证函数
+from app.dependencies import verify_tikhub_api_key, verify_openai_api_key
 from app.config import settings
 
 # 设置日志记录器
@@ -35,9 +35,10 @@ task_results = {}
 
 
 # 依赖项：获取SentimentAgent实例
-async def get_sentiment_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
+async def get_sentiment_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key),
+                                openai_api_key: str = Depends(verify_openai_api_key)):
     """使用验证后的TikHub API Key创建SentimentAgent实例"""
-    return SentimentAgent(tikhub_api_key=tikhub_api_key)
+    return SentimentAgent(tikhub_api_key=tikhub_api_key, openai_api_key=openai_api_key)
 
 
 @router.post(

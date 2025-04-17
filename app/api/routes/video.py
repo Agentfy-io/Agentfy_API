@@ -19,8 +19,7 @@ from app.core.exceptions import (
     ExternalAPIError,
 )
 from app.utils.logger import setup_logger
-from app.dependencies import verify_tikhub_api_key  # 从dependencies.py导入验证函数
-
+from app.dependencies import verify_tikhub_api_key, verify_openai_api_key, verify_lemonfox_api_key
 # 设置日志记录器
 logger = setup_logger(__name__)
 
@@ -32,9 +31,13 @@ task_results = {}
 
 
 # 依赖项：获取VideoAgent实例
-async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key)):
+async def get_video_agent(tikhub_api_key: str = Depends(verify_tikhub_api_key),
+                            openai_api_key: str = Depends(verify_openai_api_key),
+                            lemonfox_api_key: str = Depends(verify_lemonfox_api_key)) -> VideoAgent:
     """使用验证后的TikHub API Key创建VideoAgent实例"""
-    return VideoAgent(tikhub_api_key=tikhub_api_key)
+    return VideoAgent(tikhub_api_key=tikhub_api_key,
+                      openai_api_key=openai_api_key,
+                      lemonfox_api_key=lemonfox_api_key)
 
 
 # 生成唯一任务ID的辅助函数
@@ -107,7 +110,7 @@ async def process_video_task(task_id: str, analysis_method: Callable, **kwargs):
 
 @router.post(
     "/fetch_single_video_data",
-    summary="【一键取数】快速获取/清洗 视频关键数据",
+    summary="【一键取数】快速获取视频数据",
     description="""
 用途:
   * 一键获取并清洗TikTok视频的核心数据（如点赞、评论、转发数，以及创作者信息、视频设置等）
@@ -160,7 +163,7 @@ async def fetch_single_video_data(
 
 @router.post(
     "/analyze_video_info",
-    summary="【数据报告】深度分析视频统计信息",
+    summary="【数据报告】深度分析视频信息",
     description="""
 用途:
   * 针对TikTok视频的各项指标进行深度解读，自动生成数据报告
@@ -280,6 +283,7 @@ async def fetch_video_transcript(
 （图像识别省时省力，为视频精修与创意编排助力！）
 """,
     response_model_exclude_none=True,
+    deprecated=True
 )
 async def analyze_video_frames(
         request: Request,
@@ -341,6 +345,7 @@ async def analyze_video_frames(
 （让视频画面中的所有文字无所遁形，彻底捕捉宣传与信息点！）
 """,
     response_model_exclude_none=True,
+    deprecated=True
 )
 async def fetch_invideo_text(
         request: Request,
