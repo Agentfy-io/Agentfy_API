@@ -1,7 +1,6 @@
 import json
 import traceback
 from typing import Dict, Any, Optional
-
 from openai import AsyncOpenAI, OpenAIError
 from app.config import settings
 from app.utils.logger import setup_logger

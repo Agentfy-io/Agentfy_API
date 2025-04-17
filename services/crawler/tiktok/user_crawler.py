@@ -36,7 +36,7 @@ class UserCollector:
         """
 
         self.status = True
-        self.api_key = api_key
+        self.api_key = api_key or settings.TIKHUB_API_KEY
         self.base_url = settings.TIKHUB_BASE_URL
 
         if not self.api_key:

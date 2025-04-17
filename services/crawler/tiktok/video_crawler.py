@@ -28,7 +28,7 @@ class VideoCollector:
             api_key: TikHub API密钥，如果不提供则使用环境变量中的默认值
         """
         self.status = True
-        self.api_key = api_key
+        self.api_key = api_key or settings.TIKHUB_API_KEY
         self.base_url = settings.TIKHUB_BASE_URL
         self.MAX_RETRIES = 3
 

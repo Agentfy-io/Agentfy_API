@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 import os
 
+from app.config import settings
 from app.utils.logger import setup_logger
 from dotenv import load_dotenv
 
@@ -18,10 +19,10 @@ logger = setup_logger(__name__)
 
 
 class WhisperLemonFox:
-    def __init__(self):
+    def __init__(self, lemon_fox_api_key: str = None):
         self.logger = logger
         self.lemonfox_url = "https://api.lemonfox.ai"
-        self.lemonfox_api_key = os.getenv("LEMONFOX_API_KEY")
+        self.lemonfox_api_key = lemon_fox_api_key or settings.LEMON_FOX_API_KEY
         self.headers = {
             "User-Agent": "Agentfy.io/1.0.0",
             "Authorization": f"Bearer {self.lemonfox_api_key}",
