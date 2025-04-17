@@ -1,17 +1,15 @@
 <div align="center">
 <h1><a href="https://github.com/Agentfy-io/Agentfy">Agentify Sub-Agents API</a></h1>
-<a href="https://github.com/callmeiks/Agentfy_API/blob/main/README.md">English</a> | <a href="https://github.com/callmeiks/Agentfy_API/blob/main/README_zh.md">简体中文</a>
+<a href="https://github.com/Agentfy-io/Agentfy_API/blob/master/README.md">English</a> | <a href="https://github.com/Agentfy-io/Agentfy_API/blob/master/README_zh.md">简体中文</a>
 </div>
 
 这是 [Agentify](https://github.com/Agentfy-io/Agentfy) 的 API 组件，一个基于 FastAPI 的服务，提供对专业 AI 代理的访问。每个代理都通过自己的 API 端点暴露，实现模块化和专注的功能。
 
 [![Python](https://img.shields.io/badge/python-3.11+-yellow)](https://www.python.org/)
-[![GitHub stars](https://img.shields.io/github/stars/Agentfy-io/Agentfy_API.svg?style=social&label=Stars)](https://github.com/Agentfy-io/Agentfy_API)
-[![GitHub forks](https://img.shields.io/github/forks/Agentfy-io/Agentfy_API.svg?style=social&label=Forks)](https://github.com/Agentfy-io/Agentfy_API)
 [![GitHub issues](https://img.shields.io/github/issues/Agentfy-io/Agentfy_API.svg)](https://github.com/Agentfy-io/Agentfy_API/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Agentfy-io/Agentfy_API/pulls)
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/Agentfy-io/Agentfy_API/blob/main/LICENSE)
-[![Made with ❤️](https://img.shields.io/badge/made%20with-%E2%9D%A4%EF%B8%8F-red)](https://github.com/callmeiks)
+[![Made with ❤️](https://img.shields.io/badge/made%20with-%E2%9D%A4%EF%B8%8F-red)](https://github.com/Agentfy-io)
 
 ## 主要功能
 
