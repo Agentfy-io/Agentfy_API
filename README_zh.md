@@ -6,11 +6,11 @@
 这是 [Agentify](https://github.com/Agentfy-io/Agentfy) 的 API 组件，一个基于 FastAPI 的服务，提供对专业 AI 代理的访问。每个代理都通过自己的 API 端点暴露，实现模块化和专注的功能。
 
 [![Python](https://img.shields.io/badge/python-3.11+-yellow)](https://www.python.org/)
-[![GitHub stars](https://img.shields.io/github/stars/callmeiks/Agentfy_API.svg?style=social&label=Stars)](https://github.com/callmeiks/Agentfy_API)
-[![GitHub forks](https://img.shields.io/github/forks/callmeiks/Agentfy_API.svg?style=social&label=Forks)](https://github.com/callmeiks/Agentfy_API)
-[![GitHub issues](https://img.shields.io/github/issues/callmeiks/Agentfy_API.svg)](https://github.com/callmeiks/Agentfy_API/issues)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/callmeiks/Agentfy_API/pulls)
-[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/callmeiks/Agentfy_API/blob/main/LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/Agentfy-io/Agentfy_API.svg?style=social&label=Stars)](https://github.com/Agentfy-io/Agentfy_API)
+[![GitHub forks](https://img.shields.io/github/forks/Agentfy-io/Agentfy_API.svg?style=social&label=Forks)](https://github.com/Agentfy-io/Agentfy_API)
+[![GitHub issues](https://img.shields.io/github/issues/Agentfy-io/Agentfy_API.svg)](https://github.com/Agentfy-io/Agentfy_API/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Agentfy-io/Agentfy_API/pulls)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/Agentfy-io/Agentfy_API/blob/main/LICENSE)
 [![Made with ❤️](https://img.shields.io/badge/made%20with-%E2%9D%A4%EF%B8%8F-red)](https://github.com/callmeiks)
 
 ## 主要功能
@@ -24,12 +24,12 @@
 - **毒性检测**: 检测恶意和负面评论。
 
 #### 🕵️‍♂️ 网红/用户分析:
-- **用户信息**: 提取网红/商业账户数据。
+- **用户信息**: 提取网红/商业账户数据，趋势分析。
 - **帖子数据**: 分析帖子趋势、视频长度、热门视频、话题标签。
 - **风险视频**: 基于 TikTok 字段分析内容风险。
 
 #### 📹 视频分析:
-- **指标**: 观看次数、点赞、分享、视频长度。
+- **指标**: 观看次数、点赞、分享、视频长度, 商业价值。
 - **下载与转录**: 下载视频并转录内容。
 - **帧分析**: 使用 OpenCV 提取和分析帧。
 - **OCR**: 提取视频中的文本（产品名称、价格等）。
@@ -53,8 +53,8 @@
 
 1. 克隆仓库:
 ```bash
-git clone https://github.com/Agenfy/agentify.git
-cd agentify
+git clone https://github.com/Agentfy-io/Agentfy_API
+cd Agentfy_API
 ```
 
 2. 安装依赖:
