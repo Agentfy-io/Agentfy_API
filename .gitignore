@@ -39,3 +39,6 @@ agents/logs/services_cleaner_video_cleaner.log
 /services/crawler/douyin/logs
 /services/crawler/douyin/__pycache__
 /services/cleaner/tiktok/__pycache__
+/services/cleaner/tiktok/__pycache__
+/services/cleaner/tiktok/__pycache__
+/services/cleaner/tiktok/__pycache__
