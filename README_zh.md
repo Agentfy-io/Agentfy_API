@@ -1,6 +1,6 @@
 <div align="center">
 <h1><a href="https://github.com/Agentfy-io/Agentfy">Agentify Sub-Agents API</a></h1>
-<a href="https://github.com/Agentfy-io/Agentfy_API/README.md">English</a> | <a href="https://github.com/Agentfy-io/Agentfy_API/README_zh.md">简体中文</a>
+<a href="https://github.com/callmeiks/Agentfy_API/blob/main/README.md">English</a> | <a href="https://github.com/callmeiks/Agentfy_API/blob/main/README_zh.md">简体中文</a>
 </div>
 
 这是 [Agentify](https://github.com/Agentfy-io/Agentfy) 的 API 组件，一个基于 FastAPI 的服务，提供对专业 AI 代理的访问。每个代理都通过自己的 API 端点暴露，实现模块化和专注的功能。
