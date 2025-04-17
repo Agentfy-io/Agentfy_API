@@ -1,6 +1,6 @@
 <div align="center">
 <h1><a href="https://github.com/Agentfy-io/Agentfy">Agentify Sub-Agents API</a></h1>
-<a href="https://github.com/Agentfy-io/Agentfy_API/blob/main/README.md">English</a> | <a href="https://github.com/Agentfy-io/Agentfy_API/blob/main/README_zh.md">简体中文</a>
+<a href="https://github.com/Agentfy-io/Agentfy_API/README.md">English</a> | <a href="https://github.com/Agentfy-io/Agentfy_API/README_zh.md">简体中文</a>
 </div>
 
 This is the API component of [Agentify](https://github.com/Agentfy-io/Agentfy), a FastAPI-based service that provides access to specialized AI agents. Each agent is exposed through its own API endpoints, enabling modular and focused functionality.
