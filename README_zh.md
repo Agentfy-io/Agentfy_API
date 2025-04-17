@@ -3,7 +3,7 @@
 <a href="https://github.com/Agentfy-io/Agentfy_API/blob/master/README.md">English</a> | <a href="https://github.com/Agentfy-io/Agentfy_API/blob/master/README_zh.md">简体中文</a>
 </div>
 
-这是 [Agentify](https://github.com/Agentfy-io/Agentfy) 的 API 组件，一个基于 FastAPI 的服务，提供对专业 AI 代理的访问。每个代理都通过自己的 API 端点暴露，实现模块化和专注的功能。
+这是 [Agentify](https://github.com/Agentfy-io/Agentfy) 的 API 组件，一个基于 FastAPI 的服务，提供对专业社交媒体子 AI agent的访问。每个Agent都通过自己的 API 端点进行调度使用，实现模块化和专注的功能。
 
 [![Python](https://img.shields.io/badge/python-3.11+-yellow)](https://www.python.org/)
 [![GitHub issues](https://img.shields.io/github/issues/Agentfy-io/Agentfy_API.svg)](https://github.com/Agentfy-io/Agentfy_API/issues)
