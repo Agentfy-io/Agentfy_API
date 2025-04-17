@@ -1,200 +1,114 @@
-# Agentify API
+<div align="center">
+<h1><a href="https://github.com/Agentfy-io/Agentfy">Agentify Sub-Agents API</a></h1>
+<a href="https://github.com/callmeiks/Agentfy_API/blob/main/README.md">English</a> | <a href="https://github.com/callmeiks/Agentfy_API/blob/main/README_zh.md">简体中文</a>
+</div>
 
-Agentify 是一个基于 FastAPI 构建的强大社交媒体智能助手，专为用户、内容创作者和企业设计，帮助他们获取、分析和利用各类社交媒体平台的数据。
+This is the API component of [Agentify](https://github.com/Agentfy-io/Agentfy), a FastAPI-based service that provides access to specialized AI agents. Each agent is exposed through its own API endpoints, enabling modular and focused functionality.
 
-## 核心功能
+[![Python](https://img.shields.io/badge/python-3.11+-yellow)](https://www.python.org/)
+[![GitHub stars](https://img.shields.io/github/stars/callmeiks/Agentfy_API.svg?style=social&label=Stars)](https://github.com/callmeiks/Agentfy_API)
+[![GitHub forks](https://img.shields.io/github/forks/callmeiks/Agentfy_API.svg?style=social&label=Forks)](https://github.com/callmeiks/Agentfy_API)
+[![GitHub issues](https://img.shields.io/github/issues/callmeiks/Agentfy_API.svg)](https://github.com/callmeiks/Agentfy_API/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/callmeiks/Agentfy_API/pulls)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/callmeiks/Agentfy_API/blob/main/LICENSE)
+[![Made with ❤️](https://img.shields.io/badge/made%20with-%E2%9D%A4%EF%B8%8F-red)](https://github.com/callmeiks)
 
-- **数据采集**：从 TikTok 等社交平台获取评论、互动指标和其他数据
-- **智能分析**：分析用户情感、购买意向和受众参与度
-- **内容生成**：创建短视频、帖子、文案和音频内容
-- **创作者监控**：跨平台追踪内容表现
-- **多代理系统**：专业代理组件用于客户互动、情感分析、视频和音频生成
+## Key Features
 
-## 技术架构
+### TikTok
 
-Agentify 使用多代理架构，包含专业化组件：
+#### 📝 Comment Analysis:
+- **Purchase Intent**: Identify potential buyers.
+- **Sentiment**: Analyze audience sentiment.
+- **Creator-Follower Relationship**: Classify users (loyal fans, trolls, etc.).
+- **Toxicity**: Detect malicious and negative comments.
 
-- **客户代理**：识别潜在客户并分析用户参与度
-- **情感代理**：分析内容的情感基调和用户响应
-- **视频代理**：生成和处理视频内容
-- **音频生成器**：创建音频内容和处理声音
+#### 🕵️‍♂️ Influencer/User Analysis:
+- **User Info**: Extract influencer/business account data.
+- **Post Data**: Analyze post trends, video length, top videos, hashtags.
+- **Risk Video**: Analyze content risk based on TikTok fields.
 
-## 安装
+#### 📹 Video Analysis:
+- **Metrics**: Views, likes, shares, video length.
+- **Download & Transcription**: Download videos and transcribe content.
+- **Frame Analysis**: Extract frames and analyze using OpenCV.
+- **OCR**: Extract text in videos (product names, prices, etc.).
 
-### 前提条件
+### Generators
 
-- Python 3.8+
+#### 🎥 Short Video Script Generation:
+- **Script Generation**: Generate scripts for short videos.
+- **Audio Generation**: Generate audio for short videos using your own voice or any voice.
+- **Xiaohongshu Post Generation**: Generate Xiaohongshu posts based on Douyin videos. （Claude API key required）
+
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.11+
 - pip
 
-### 设置步骤
+### Installation
 
-1. 克隆仓库：
-
+1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/agentify.git
+git clone https://github.com/Agenfy/agentify.git
 cd agentify
 ```
 
-2. 安装依赖：
-
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-3. 复制环境变量模板并添加您的 API 密钥：
-
+4. Edit `.env` file with your API keys:
 ```bash
-cp .env.example .env
+OPENAI_API_KEY=your_openai_key
+ANTHROPIC_API_KEY=your_anthropic_key
+TIKHUB_API_KEY=your_tikhub_key
+TIKHUB_BASE_URL=your_tikhub_base_url
 ```
 
-4. 编辑 `.env` 文件，填写以下信息：
+5. You must get your own API keys from the following services:
+- **TikHub API Key**: [https://www.user.tikhub.io](https://www.user.tikhub.io) (Required)
+- **OpenAI API Key**: [https://platform.openai.com/account/api-keys](https://platform.openai.com/account/api-keys)(Required)
+- **LemonFox API Key**: [https://lemonfox.ai](https://lemonfox.ai) (Optional)
+- **ElevenLabs API Key**: [https://beta.elevenlabs.io](https://beta.elevenlabs.io) (Optional)
 
-```
-OPENAI_API_KEY=OpenAI_API_密钥（用于 GPT 模型）
-ANTHROPIC_API_KEY=Anthropic_API_密钥（用于 Claude）
-TIKHUB_API_KEY=TikHub_API_密钥（用于获取 TikTok 数据）
-TIKHUB_BASE_URL=TikHub_API_基础_URL
-```
-
-5. 运行服务
-
-启动开发服务器：
-
+6. Run the server:
 ```bash
-python -m app.main
+python -m .main
 ```
-
-或使用 uvicorn 直接运行：
-
+or
 ```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API 将在 `http://localhost:8000` 上可用，交互式文档可在 `http://localhost:8000/docs` 访问。
+Access the API at `http://localhost:8000` and documentation at `http://localhost:8000/docs`
 
-## API 端点
+7. After you execute one of the endpoints in the API, you will get a task id, please put it in the corresponding tasks checking endpoint to check the status and result of the task.
 
-### 社交媒体数据
+## 🙏 Sponsorship & Support
+This project is sponsor by [TikHub](https://tikhub.io), a platform that empower developers and businesses with seamless APIs to transform social media data into actionable insights.
+They support Data Access to TikTok, Douyin, Instagram, YouTube, X (Twitter), Xiaohongshu, Lemon8, Bilibili, and more.
 
-```http
-POST /api/v1/comments/fetch    # 获取视频评论
-GET  /api/v1/comments/{aweme_id} # 获取特定视频 ID 的评论
-```
+- **🏠 Home**: [https://www.tikhub.io](https://www.tikhub.io)
+- **👨‍💻 Github**: [https://github.com/TikHub](https://github.com/TikHub)
+- **⚡ Documents (Swagger UI)**: [https://api.tikhub.io](https://api.tikhub.io)
+- **🦊 Documents (Apifox UI)**: [https://docs.tikhub.io](https://docs.tikhub.io)
+- **🍱 SDK**: [https://github.com/TikHub/TikHub-API-Python-SDK](https://github.com/TikHub/TikHub-API-Python-SDK)
+- **🐙 Demo Code (GitHub)**: [https://github.com/TikHub/TikHub-API-Demo](https://github.com/TikHub/TikHub-API-Demo)
+- **📶 API Status**: [https://monitor.tikhub.io](https://monitor.tikhub.io)
+- **📧 Support**: [Discord Server](https://discord.gg/aMEAS8Xsvz)
 
-### 数据分析
 
-```http
-POST /api/v1/comments/analysis/purchase-intent    # 分析评论中的购买意向
-POST /api/v1/comments/analysis/potential-customers # 识别潜在客户
-POST /api/v1/comments/analysis/sentiment          # 分析评论中的情感
-```
+## 📬 Contact
 
-### 内容生成
+Have questions, want to contribute, or need help integrating Agentfy into your stack?
 
-```http
-POST /api/v1/content/video  # 生成视频内容
-POST /api/v1/content/audio  # 生成音频内容
-POST /api/v1/content/copy   # 为帖子生成文案
-```
+Feel free to reach out:
 
-### 创作者工具
-
-```http
-GET /api/v1/monitor/performance # 监控内容表现
-GET /api/v1/monitor/trends      # 追踪与您领域相关的热门话题
-```
-
-## 配置
-
-主要配置选项可通过环境变量或 `.env` 文件设置：
-
-| 参数                | 描述                  | 默认值          |
-|---------------------|---------------------|--------------|
-| HOST               | 服务器主机            | 0.0.0.0      |
-| PORT               | 服务器端口            | 8000         |
-| DEBUG              | 调试模式              | false        |
-| LOG_LEVEL          | 日志级别              | info         |
-| DEFAULT_BATCH_SIZE | 默认批处理大小        | 30           |
-| MAX_BATCH_SIZE     | 最大批处理大小        | 100          |
-| DEFAULT_AI_MODEL   | 默认 AI 模型          | gpt-4o-mini  |
-
-## 项目结构
-
-```plaintext
-agentify/
-├── __init__.py
-├── agents/     # 代理组件
-    ├── audio_generator.py     # 音频内容生成
-    ├── customer_agent.py      # 客户分析和参与度
-    ├── sentiment_agent.py     # 情感分析引擎
-    ├── video_agent.py         # 视频全方位分析
-├── app/
-    ├── __init__.py
-    ├── main.py            # FastAPI 应用入口
-    ├── config.py          # 配置文件
-    ├── dependencies.py    # 依赖注入
-    ├── api/
-    │   ├── routes/
-    │   │   ├── audio.py      # 音频内容生成 API 路由
-    │   │   ├── auth.py       # 用户认证
-    │   │   ├── customer.py   # 客户分析 API 路由
-    │   │   ├── sentiment.py  # 情感分析 API 路由
-    │   │   ├── video.py      # 视频分析 API 路由
-    │   ├── models/
-    │   │   ├── comments.py  # 评论相关数据模型
-    │   │   ├── responses.py # 通用响应模型
-    ├── core/
-    │   ├── exceptions.py    # 自定义异常
-    ├── utils/
-        ├── logger.py        # 日志工具
-├── services/
-    │   ├── crawler/    # 爬虫类
-    │   │   ├── comment_crawler.py  
-    │   ├── cleaner/    # 数据清洗
-    │   │   ├── comment_cleaner.py  
-    │   ├── ai_models/    # AI 模型服务
-    │   │   ├── chatgpt.py   # ChatGPT 客户端
-    │   │   ├── claude.py    # Claude 客户端
-    │   │   ├── genny.py    # Genny 客户端
-    │   │   ├── opencv.py    # OpenCV 视频处理 
-```
-
-## 开发指南
-
-### 添加新功能
-
-1. 在 `app/api/models/` 中定义新的数据模型。
-2. 在 `agents/`代理文件中实现功能逻辑。
-3. 在 `app/api/routes/` 中添加新的端点。
-
-### 代理组件
-
-- **客户代理**：处理用户识别、参与度评分和潜在客户生成
-- **情感代理**：处理评论和反应中的情感内容
-- **视频代理**：处理视频生成、编辑和优化
-- **音频生成器**：创建配音、音乐和音效
-
-## 错误处理
-
-API 使用标准 HTTP 状态码，并返回详细的错误信息：
-
-- **400 Bad Request**：输入验证失败
-- **401 Unauthorized**：API 密钥缺失或无效
-- **404 Not Found**：请求的资源不存在
-- **429 Too Many Requests**：超过速率限制
-- **500 Internal Server Error**：服务器内部错误
-- **502 Bad Gateway**：外部 API 调用失败
-
-## 参与贡献
-
-```bash
-Fork 仓库
-创建功能分支：git checkout -b feature/amazing-feature
-提交更改：git commit -m 'Add amazing feature'
-推送到分支：git push origin feature/amazing-feature
-提交 Pull Request
-```
-
-## 许可证
-
-MIT
+- 📧 **Email:** [lqiu314@gmail.com](mailto:lqiu314@gmail.com) OR [evil0ctal1985@gmail.com](mailto:evil0ctal1985@gmail.com) 
+- 🧑‍💻 **GitHub:** [@callmeiks](https://github.com/callmeiks) OR [@Evil0ctal](https://github.com/Evil0ctal)
+- 💡 Let's build the next generation of **agent-powered digital infrastructure** — together.
